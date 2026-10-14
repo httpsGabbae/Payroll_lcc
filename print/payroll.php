@@ -1,7 +1,15 @@
 <?php
 
-require_once __DIR__ . '/../includes/auth.php';
-require_role('superadmin', 'finance');
+require_once __DIR__ . '/../config/database.php';
+if (isset($_SESSION['admin_id'])) {
+    require_once __DIR__ . '/../includes/auth.php';
+    require_role('superadmin', 'finance');
+} elseif (empty($_SESSION['employee_id'])) {
+    http_response_code(403);
+    exit('Access denied.');
+} else {
+    require_once __DIR__ . '/../employee/auth.php';
+}
 require_once __DIR__ . '/../includes/pdf.php';
 
 if (!function_exists('employee_name')) {
@@ -28,7 +36,7 @@ if ($isAdmin) {
     $stmt = $conn->prepare('SELECT p.*, e.employee_no, e.first_name, e.middle_name, e.last_name, e.department, e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id WHERE p.payroll_id=? LIMIT 1');
     $stmt->bind_param('i', $id);
 } else {
-    $stmt = $conn->prepare('SELECT p.*, e.employee_no, e.first_name, e.middle_name, e.last_name, e.department, e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id WHERE p.payroll_id=? AND p.employee_id=? LIMIT 1');
+    $stmt = $conn->prepare("SELECT p.*, e.employee_no, e.first_name, e.middle_name, e.last_name, e.department, e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id WHERE p.payroll_id=? AND p.employee_id=? AND p.status IN ('Approved','Paid') LIMIT 1");
     $stmt->bind_param('ii', $id, $sessionEmployeeId);
 }
 $stmt->execute();
@@ -37,6 +45,14 @@ $payroll = $stmt->get_result()->fetch_assoc();
 if (!$payroll) {
     exit('Payroll record not found.');
 }
+$payDate = null;
+if (!empty($payroll['period_id'])) {
+    $periodStmt=$conn->prepare('SELECT pay_date FROM payroll_periods WHERE period_id=?');
+    $periodStmt->bind_param('i',$payroll['period_id']);$periodStmt->execute();
+    $payDate=$periodStmt->get_result()->fetch_assoc()['pay_date']??null;
+}
+$lineStmt=$conn->prepare('SELECT kind,label,amount FROM payroll_lines WHERE payroll_id=? ORDER BY line_id');
+$lineStmt->bind_param('i',$id);$lineStmt->execute();$itemized=$lineStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
 class PayslipPDF extends FPDF
 {
@@ -64,7 +80,7 @@ $pdf->Ln(5);
 pdf_field_row($pdf, 'Employee ID', $payroll['employee_no'], 'Status', $payroll['status']);
 pdf_field_row($pdf, 'Employee Name', employee_name($payroll), 'Date Prepared', pdf_date($payroll['created_at']));
 pdf_field_row($pdf, 'Department', $payroll['department'] ?: 'Not assigned', 'Position', $payroll['position'] ?: 'Not assigned');
-pdf_field_row($pdf, 'Pay Period', pdf_date($payroll['period_start']) . ' - ' . pdf_date($payroll['period_end']), 'Record Date', pdf_date($payroll['created_at']));
+pdf_field_row($pdf, 'Pay Period', pdf_date($payroll['period_start']) . ' - ' . pdf_date($payroll['period_end']), 'Pay Date', $payDate ? pdf_date($payDate) : 'Unknown (legacy)');
 
 $pdf->Ln(7);
 
@@ -76,14 +92,21 @@ $pdf->Cell(90, 8, pdf_text('DEDUCTIONS'), 1, 1, 'L', true);
 $pdf->SetTextColor(23, 50, 59);
 
 $startY = $pdf->GetY();
-$leftRows = [
-    ['Basic Salary', $payroll['basic_salary']],
-    ['Allowances', $payroll['allowances']],
-    ['Other Earnings', $payroll['other_earnings']],
-];
-$rightRows = [
-    ['Deductions', $payroll['deductions']],
-];
+$leftRows = [['Base Pay', $payroll['basic_salary']]];
+$rightRows = [];
+if ((float)$payroll['allowances']>0) $leftRows[]=['Allowances', $payroll['allowances']];
+if ((float)$payroll['other_earnings']>0 && (($payroll['compensation_basis_snapshot'] ?? '') === 'manual' || !array_filter($itemized, static fn($line) => $line['kind'] === 'Income'))) {
+    $leftRows[]=['Other Earnings', $payroll['other_earnings']];
+}
+if ($itemized) {
+    foreach ($itemized as $line) {
+        if ($line['kind']==='Income') $leftRows[]=[$line['label'],$line['amount']];
+        else $rightRows[]=[$line['label'],$line['amount']];
+    }
+} else {
+    // Historical aggregate-only records have no invented line details.
+    if ((float)$payroll['deductions']>0) $rightRows[]=['Deductions (legacy total)',$payroll['deductions']];
+}
 
 $maxRows = max(count($leftRows), count($rightRows));
 for ($i = 0; $i < $maxRows; $i++) {

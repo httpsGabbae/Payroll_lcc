@@ -12,9 +12,8 @@ if (!function_exists('e')) {
 if (!function_exists('money')) {
     function money($value): string { return '₱ ' . number_format((float)$value, 2); }
 }
-function employee_photo_url(?string $path): string {
-    $path = ltrim(trim((string)$path), '/\\');
-    return $path === '' ? '' : '../' . $path;
+function employee_photo_url(?string $path, int $employeeId): string {
+    return !$path || $employeeId < 1 ? '' : '../employee_photo.php?id=' . $employeeId;
 }
 function current_employee($conn): ?array {
     $id = (int)($_SESSION['employee_id'] ?? 0);

@@ -1,5 +1,4 @@
-<?php
-?>
+<?php require_once __DIR__.'/config/database.php'; ?>
 <!doctype html>
 <html lang="en">
 
@@ -28,7 +27,7 @@
             <div class="login-mobile-brand"><img src="uploads/logo1.jpg" alt="LCC logo"><div><strong>LCC PAYROLL</strong><span>Administrator Sign In</span></div></div>
             <div class="eyebrow">Administrator</div>
             <h2>Welcome back</h2>
-            <p class="hint">Sign in to open the payroll dashboard.</p><?php if (isset($_GET["error"])): ?><div class="error" role="alert">Incorrect username or password.</div><?php endif; ?><form method="post" action="auth/login.php"><label>Username</label><input type="text" name="username" autocomplete="username" required><label>Password</label><input type="password" name="password" autocomplete="current-password" required><button type="submit">Sign In</button></form><a class="portal-link" href="employee/login.php">Employee Portal <span>→</span></a>
+            <p class="hint">Sign in to open the payroll dashboard.</p><?php if (isset($_GET["error"])): ?><div class="error" role="alert">Incorrect username or password.</div><?php endif; ?><form method="post" action="auth/login.php"><?php echo csrf_field(); ?><label>Username</label><input type="text" name="username" autocomplete="username" required><label>Password</label><input type="password" name="password" autocomplete="current-password" required><button type="submit">Sign In</button></form><a class="portal-link" href="employee/login.php">Employee Portal <span>→</span></a>
         </div>
     </section>
 </body>

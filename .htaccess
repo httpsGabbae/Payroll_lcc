@@ -1,0 +1,3 @@
+<FilesMatch "(?i)(^\.env|\.sql$|\.db$|\.sqlite3?$|\.dump$|\.bak$|\.log$|\.pem$|\.key$|\.p12$|\.pfx$|^setup_admin\.php$|^smoke_lcc\.php$|^verify_lcc\.php$)">
+    Require all denied
+</FilesMatch>

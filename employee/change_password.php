@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new = $_POST['new_password'] ?? '';
     $confirm = $_POST['confirm_password'] ?? '';
     $stored = (string)($employee['portal_password'] ?? '');
-    $valid = password_verify($current, $stored) || ($stored !== '' && hash_equals($stored, $current));
+    $valid = $stored !== '' && password_verify($current, $stored);
     if (!$valid) $error = 'The current password is incorrect.';
     elseif (strlen($new) < 8) $error = 'The new password must be at least 8 characters.';
     elseif ($new !== $confirm) $error = 'The new passwords do not match.';

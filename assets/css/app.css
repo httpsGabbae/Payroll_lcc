@@ -937,7 +937,9 @@ textarea:disabled {
 .admin-chevron { font-size:16px; color:var(--muted); }
 .admin-dropdown { position:absolute; right:0; top:calc(100% + 8px); width:220px; padding:7px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 15px 35px rgba(15,48,57,.16); display:none; z-index:100; }
 .admin-dropdown.show { display:block; }
-.admin-dropdown-name { padding:10px 11px 8px; color:var(--muted); font-size:11px; font-weight:700; border-bottom:1px solid var(--line); margin-bottom:5px; }
+.admin-dropdown-name { display:grid; gap:7px; padding:10px 11px 11px; color:var(--muted); font-size:11px; font-weight:700; border-bottom:1px solid var(--line); margin-bottom:5px; }
+.admin-dropdown-person { color:var(--text); font-size:13px; line-height:1.35; overflow-wrap:anywhere; }
+.admin-role-badge { display:inline-flex; justify-self:start; align-items:center; border-radius:6px; padding:3px 7px; background:rgba(15,159,154,.12); color:var(--accent-dark); font-size:11px; line-height:1.3; }
 .dropdown-item { width:100%; display:flex; align-items:center; gap:9px; padding:10px 11px; border:0; border-radius:8px; background:transparent; color:var(--text); text-align:left; font-size:13px; font-weight:650; cursor:pointer; }
 .dropdown-item:hover { background:#f3f7f8; }
 .dropdown-item.danger-item { color:var(--danger); }
@@ -3602,3 +3604,125 @@ body:not(.sidebar-collapsed) .employee-sidebar .brand-text {
     max-width: 74px !important;
   }
 }
+/* LCC usability: readable controls and a visible path through the payroll workflow. */
+.topbar-help-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.topbar-help-link:hover,
+.topbar-help-link:focus-visible { border-color: var(--accent); color: var(--accent-dark); }
+.sidebar .nav { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.sidebar .nav-link { min-height: 44px; }
+.sidebar .nav-link:focus-visible,
+.lcc-guide-step:focus-visible,
+.lcc-help-strip a:focus-visible { outline: 3px solid #f4c95d; outline-offset: 2px; }
+body.lcc-ux .page-heading p,
+body.lcc-ux .card-head p { line-height: 1.55; }
+body.lcc-ux .field label,
+body.lcc-ux .toolbar label { font-weight: 700; }
+body.lcc-ux input:not([type="checkbox"]),
+body.lcc-ux select,
+body.lcc-ux textarea { min-height: 44px; }
+body.lcc-ux .btn { min-height: 44px; padding: 10px 16px; }
+body.lcc-ux .btn-small { min-height: 40px; }
+body.lcc-ux .table th,
+body.lcc-ux .table td { padding-top: 13px; padding-bottom: 13px; }
+.lcc-help-strip {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  margin: 0 0 22px; padding: 16px 20px; border: 1px solid #afdcd7;
+  border-radius: 12px; background: #edf9f7; color: var(--text);
+  font-size: 14px; line-height: 1.5;
+}
+.lcc-help-strip strong { display: block; margin-bottom: 2px; font-size: 15px; }
+.lcc-help-strip a { flex: 0 0 auto; color: var(--accent-dark); font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.lcc-guide-section { margin-bottom: 20px; }
+.lcc-guide-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; padding: 18px; }
+.lcc-guide-step {
+  display: flex; align-items: flex-start; gap: 14px; min-height: 118px;
+  padding: 20px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--card); color: var(--text); line-height: 1.5;
+}
+a.lcc-guide-step:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+.lcc-step-number { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 18px; font-weight: 800; }
+.lcc-guide-step strong { display: block; font-size: 19px; line-height: 1.3; }
+.lcc-guide-step small { display: block; margin-top: 6px; font-size: 15px; }
+.lcc-guide-step em { display: block; margin-top: 9px; color: var(--accent-dark); font-size: 15px; font-style: normal; font-weight: 800; }
+.lcc-guide-step a { color: var(--accent-dark); text-decoration: underline; font-weight: 750; }
+.lcc-glossary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 20px; margin: 0; padding: 4px 22px 20px; }
+.lcc-glossary div { padding: 15px 0; border-bottom: 1px solid var(--line); }
+.lcc-glossary dt { font-weight: 800; font-size: 17px; }
+.lcc-glossary dd { margin: 4px 0 0; font-size: 15px; line-height: 1.5; }
+body.dark-mode .lcc-help-strip { background: #123f43; border-color: #326b6d; color: #f3fbfa; }
+body.dark-mode .lcc-help-strip a,
+body.dark-mode .lcc-guide-step a,
+body.dark-mode .lcc-guide-step em { color: #75ded7; }
+@media (max-width: 900px) {
+  .lcc-guide-grid,.lcc-glossary { grid-template-columns: 1fr; }
+  .lcc-help-strip { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 600px) {
+  .topbar-help-link { font-size: 13px; padding: 0 8px; min-height: 38px; }
+  .lcc-guide-grid { padding: 12px; }
+}
+@media (max-width: 820px) {
+  body.sidebar-collapsed .sidebar.mobile-collapsed .brand-text,
+  body.sidebar-collapsed .sidebar.mobile-collapsed .nav-label,
+  body.sidebar-collapsed .sidebar.mobile-collapsed .nav-section { display: none !important; }
+  body.sidebar-collapsed .sidebar.mobile-collapsed .nav-link { justify-content: center !important; font-size: 0 !important; }
+  body.sidebar-collapsed .sidebar.mobile-collapsed .nav-icon { flex: 0 0 auto !important; }
+}
+@media (min-width: 821px) {
+  body:not(.sidebar-collapsed) .sidebar .nav {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+  body:not(.sidebar-collapsed) .sidebar .nav-section {
+    flex: 0 0 auto !important;
+    min-height: 30px !important;
+    line-height: 1.4 !important;
+  }
+}
+@media (max-width: 820px) {
+  .sidebar.mobile-expanded .nav { overflow-y: auto !important; overflow-x: hidden !important; }
+  .sidebar.mobile-expanded .nav-section { flex: 0 0 auto !important; min-height: 30px !important; line-height: 1.4 !important; }
+}
+
+/* Keep the shared navigation visually fixed while PHP loads the next page. */
+@view-transition { navigation: auto; }
+.sidebar { view-transition-name: lcc-sidebar; }
+::view-transition-old(lcc-sidebar),
+::view-transition-new(lcc-sidebar) { animation: none; }
+::view-transition-old(root) { animation: 130ms ease-out both fade-out; }
+::view-transition-new(root) { animation: 180ms ease-in both fade-in; }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none; }
+}
+
+.payroll-auto-breakdown {
+  margin: 10px 0 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+.payroll-auto-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+}
+.payroll-auto-breakdown strong { white-space: nowrap; }

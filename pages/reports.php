@@ -8,8 +8,8 @@ if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
 $monthStart = $month . '-01';
 $monthEnd = date('Y-m-t', strtotime($monthStart));
 
-$stmt = $conn->prepare('SELECT p.*,e.employee_no,e.first_name,e.last_name,e.department,e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id WHERE p.period_start <= ? AND p.period_end >= ? ORDER BY p.period_end DESC,p.payroll_id DESC');
-$stmt->bind_param('ss', $monthEnd, $monthStart);
+$stmt = $conn->prepare('SELECT p.*,pp.pay_date,e.employee_no,e.first_name,e.last_name,e.department,e.position FROM payroll_records p JOIN payroll_periods pp ON pp.period_id=p.period_id JOIN employees e ON e.employee_id=p.employee_id WHERE pp.pay_date BETWEEN ? AND ? ORDER BY pp.pay_date DESC,p.payroll_id DESC');
+$stmt->bind_param('ss', $monthStart, $monthEnd);
 $stmt->execute();
 $result = $stmt->get_result();
 $rows = [];
@@ -32,7 +32,7 @@ for ($i = 5; $i >= 0; $i--) {
 }
 $trendStart = array_key_first($trend) . '-01';
 $trendEnd = date('Y-m-t', strtotime($monthStart));
-$stmt = $conn->prepare("SELECT EXTRACT(YEAR FROM period_end) AS y, EXTRACT(MONTH FROM period_end) AS m, COALESCE(SUM(gross_pay),0) AS gross, COALESCE(SUM(net_pay),0) AS net FROM payroll_records WHERE period_end BETWEEN ? AND ? GROUP BY EXTRACT(YEAR FROM period_end), EXTRACT(MONTH FROM period_end) ORDER BY y, m");
+$stmt = $conn->prepare("SELECT EXTRACT(YEAR FROM pp.pay_date) AS y, EXTRACT(MONTH FROM pp.pay_date) AS m, COALESCE(SUM(p.gross_pay),0) AS gross, COALESCE(SUM(p.net_pay),0) AS net FROM payroll_records p JOIN payroll_periods pp ON pp.period_id=p.period_id WHERE pp.pay_date BETWEEN ? AND ? GROUP BY EXTRACT(YEAR FROM pp.pay_date), EXTRACT(MONTH FROM pp.pay_date) ORDER BY y, m");
 $stmt->bind_param('ss', $trendStart, $trendEnd);
 $stmt->execute();
 $trendResult = $stmt->get_result();
@@ -50,14 +50,14 @@ foreach ($trend as $point) $trendMax = max($trendMax, $point['gross'], $point['n
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- FAVICON: Put your favicon file at /assets/favicon.png -->
-<link rel="icon" type="image/png" href="../assets/favicon.png"><title>LCC Payroll System</title><link rel="stylesheet" href="../assets/css/app.css?v=20260909-rail4"><link rel="stylesheet" href="../assets/css/apple-system.css?v=20260916-apple9"><script src="../assets/js/app.js?v=20260916-rail5" defer></script><script src="../assets/js/apple-motion.js?v=20260916-apple1" defer></script></head>
+<link rel="icon" type="image/png" href="../assets/favicon.png"><title>LCC Payroll System</title><link rel="stylesheet" href="../assets/css/app.css?v=20261012-nav1"><link rel="stylesheet" href="../assets/css/apple-system.css?v=20260916-apple9"><script src="../assets/js/app.js?v=20261012-nav1" defer></script><script src="../assets/js/apple-motion.js?v=20261012-nav1" defer></script></head>
 <body><div class="app">
 <?php sidebar('reports'); ?>
 <main class="main">
 <?php topbar('Reports'); ?>
 <div class="content">
     <div class="page-heading">
-        <div><div class="eyebrow">Payroll Reporting</div><h1>Monthly Payroll Report</h1><p>Choose a month, review the totals, then open the print-ready report without leaving this screen.</p></div>
+        <div><div class="eyebrow">Payroll Reporting</div><h1>Monthly Payroll Report</h1><p>Grouped by actual pay date. Historical records with unknown pay dates remain in Payroll Records and are excluded here.</p></div>
         <div class="print-tools"><button type="button" class="btn btn-primary" onclick="window.open('../print/monthly_payroll.php?month=<?php echo e($month); ?>','_blank')"><?php echo ui_icon('printer'); ?> Print Monthly Report</button></div>
     </div>
 
@@ -89,9 +89,9 @@ foreach ($trend as $point) $trendMax = max($trendMax, $point['gross'], $point['n
     </section>
 
     <section class="report-layout">
-        <div class="card report-table-card"><div class="card-head"><div><div class="eyebrow">Printable Register</div><h2><?php echo e(date('F Y', strtotime($monthStart))); ?> Payroll</h2><p>Includes payroll periods overlapping the selected month.</p></div><button type="button" class="icon-action print" title="Print monthly report" aria-label="Print monthly report" onclick="window.open('../print/monthly_payroll.php?month=<?php echo e($month); ?>','_blank')"><?php echo ui_icon('printer'); ?></button></div>
+        <div class="card report-table-card"><div class="card-head"><div><div class="eyebrow">Printable Register</div><h2><?php echo e(date('F Y', strtotime($monthStart))); ?> Payroll</h2><p>Includes records by actual pay date. Totals include Draft, Approved and Paid; inspect status before treating them as disbursed.</p></div><button type="button" class="icon-action print" title="Print monthly report" aria-label="Print monthly report" onclick="window.open('../print/monthly_payroll.php?month=<?php echo e($month); ?>','_blank')"><?php echo ui_icon('printer'); ?></button></div>
             <div class="table-wrap"><table class="table report-table"><thead><tr><th>Employee</th><th>Department</th><th>Period</th><th>Gross</th><th>Net</th><th>Status</th></tr></thead><tbody>
-            <?php if (!$rows): ?><tr><td colspan="6" class="empty">No payroll records overlap this month.</td></tr><?php else: foreach ($rows as $row): ?><tr><td><strong><?php echo e($row['last_name'].', '.$row['first_name']); ?></strong><div class="mini"><?php echo e($row['employee_no']); ?></div></td><td><?php echo e($row['department'] ?: 'Unassigned'); ?></td><td><?php echo e(date('M d',strtotime($row['period_start'])) . ' – ' . date('M d, Y',strtotime($row['period_end']))); ?></td><td><?php echo money($row['gross_pay']); ?></td><td><strong><?php echo money($row['net_pay']); ?></strong></td><td><span class="badge"><?php echo e($row['status']); ?></span></td></tr><?php endforeach; endif; ?>
+            <?php if (!$rows): ?><tr><td colspan="6" class="empty">No payroll records have a pay date in this month.</td></tr><?php else: foreach ($rows as $row): ?><tr><td><strong><?php echo e($row['last_name'].', '.$row['first_name']); ?></strong><div class="mini"><?php echo e($row['employee_no']); ?></div></td><td><?php echo e($row['department'] ?: 'Unassigned'); ?></td><td><?php echo e(date('M d',strtotime($row['period_start'])) . ' – ' . date('M d, Y',strtotime($row['period_end']))); ?></td><td><?php echo money($row['gross_pay']); ?></td><td><strong><?php echo money($row['net_pay']); ?></strong></td><td><span class="badge"><?php echo e($row['status']); ?></span></td></tr><?php endforeach; endif; ?>
             </tbody></table></div>
         </div>
         <aside class="card report-side-card"><div class="card-head"><div><div class="eyebrow">Breakdown</div><h2>By Department</h2></div></div><div class="department-bars">
@@ -116,7 +116,7 @@ foreach ($trend as $point) $trendMax = max($trendMax, $point['gross'], $point['n
     <table class="print-sheet-table">
         <thead><tr><th>Employee ID</th><th>Employee</th><th>Department</th><th>Pay Period</th><th>Gross</th><th>Net</th><th>Status</th></tr></thead>
         <tbody>
-        <?php if (!$rows): ?><tr><td colspan="7" class="print-empty">No payroll records overlap this month.</td></tr><?php else: foreach ($rows as $row): ?>
+        <?php if (!$rows): ?><tr><td colspan="7" class="print-empty">No payroll records have a pay date in this month.</td></tr><?php else: foreach ($rows as $row): ?>
             <tr><td><?php echo e($row['employee_no']); ?></td><td><?php echo e($row['last_name'].', '.$row['first_name']); ?></td><td><?php echo e($row['department'] ?: 'Unassigned'); ?></td><td><?php echo e(date('M d', strtotime($row['period_start'])) . ' – ' . date('M d, Y', strtotime($row['period_end']))); ?></td><td class="num"><?php echo money($row['gross_pay']); ?></td><td class="num"><?php echo money($row['net_pay']); ?></td><td class="status"><?php echo e($row['status']); ?></td></tr>
         <?php endforeach; endif; ?>
         </tbody>

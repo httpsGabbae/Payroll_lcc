@@ -2,10 +2,25 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_role('superadmin', 'finance', 'hr');
 require_once __DIR__ . '/../includes/layout.php';
+require_once __DIR__ . '/../includes/lcc_payroll.php';
 
 /* HR sees a masked, read-only view: pay figures are never queried and the
    create/status actions are refused server-side (not just hidden). */
 $isHr = admin_role() === 'hr';
+
+if (($_GET['quote'] ?? '') === '1') {
+    require_role('superadmin', 'finance');
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    try {
+        [$scheduled, $total] = lcc_scheduled_deductions($conn, (int)($_GET['employee_id'] ?? 0), (string)($_GET['pay_date'] ?? ''));
+        echo json_encode(['total' => lcc_decimal($total), 'items' => array_map(static fn($line) => ['name' => $line[2], 'amount' => lcc_decimal($line[3])], $scheduled)]);
+    } catch (Throwable $e) {
+        http_response_code(422);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
 
 $message = '';
 $error = '';
@@ -17,88 +32,21 @@ if ($isHr) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_role('superadmin', 'finance');
     require_csrf();
-    $postAction = $_POST['action'] ?? 'create';
-    if ($postAction === 'update_status') {
-        $payrollId = (int)($_POST['payroll_id'] ?? 0);
-        $newStatus = $_POST['status'] ?? '';
-        $allowedStatuses = ['Draft', 'Approved', 'Paid'];
-        if ($payrollId <= 0 || !in_array($newStatus, $allowedStatuses, true)) {
-            $error = 'Invalid payroll status update.';
-        } else {
-            $stmt = $conn->prepare('UPDATE payroll_records SET status=? WHERE payroll_id=?');
-            $stmt->bind_param('si', $newStatus, $payrollId);
-            if ($stmt->execute()) {
-                header('Location: payroll.php?status_updated=1');
-                exit;
-            }
-            $error = 'Unable to update the payroll status.';
+    try {
+        $action = (string)($_POST['action'] ?? '');
+        if ($action === 'create') {
+            lcc_create_simple_payroll($conn, (int)($_POST['employee_id'] ?? 0), (string)($_POST['period_start'] ?? ''),
+                (string)($_POST['period_end'] ?? ''), (string)($_POST['pay_date'] ?? ''),
+                (string)($_POST['allowances'] ?? '0'), (string)($_POST['other_earnings'] ?? '0'),
+                (string)($_POST['deductions'] ?? '0'), trim((string)($_POST['notes'] ?? '')));
+            header('Location: payroll.php?saved=1'); exit;
         }
-    } else {
-    $employeeId = (int)($_POST['employee_id'] ?? 0);
-    $start = $_POST['period_start'] ?? '';
-    $end = $_POST['period_end'] ?? '';
-    $allowances = round((float)($_POST['allowances'] ?? 0), 2);
-    $other = round((float)($_POST['other_earnings'] ?? 0), 2);
-    $deductions = round((float)($_POST['deductions'] ?? 0), 2);
-    $notes = trim($_POST['notes'] ?? '');
-    $startTs = $start === '' ? false : strtotime($start);
-    $endTs = $end === '' ? false : strtotime($end);
-
-    if ($employeeId <= 0 || $start === '' || $end === '') {
-        $error = 'Please choose an employee and enter the payroll period.';
-        $showForm = true;
-    } elseif ($startTs === false || $endTs === false) {
-        $error = 'Invalid payroll period dates.';
-        $showForm = true;
-    } elseif ($endTs < $startTs) {
-        $error = 'The payroll end date cannot be earlier than the start date.';
-        $showForm = true;
-    } elseif ($allowances < 0 || $other < 0 || $deductions < 0) {
-        $error = 'Payroll amounts cannot be negative.';
-        $showForm = true;
-    } else {
-        $stmt = $conn->prepare('SELECT basic_salary FROM employees WHERE employee_id=? LIMIT 1');
-        $stmt->bind_param('i', $employeeId);
-        $stmt->execute();
-        $employee = $stmt->get_result()->fetch_assoc();
-
-        if (!$employee) {
-            $error = 'The selected employee was not found.';
-            $showForm = true;
-        } else {
-            $basic = round((float)$employee['basic_salary'], 2);
-            $gross = round($basic + $allowances + $other, 2);
-            $net = round($gross - $deductions, 2);
-
-            if ($deductions > $gross) {
-                $error = 'Deductions cannot exceed gross pay. Net pay cannot be negative.';
-                $showForm = true;
-            } else {
-                $stmt = $conn->prepare('SELECT payroll_id FROM payroll_records WHERE employee_id=? AND period_start=? AND period_end=? LIMIT 1');
-                $stmt->bind_param('iss', $employeeId, $start, $end);
-                $stmt->execute();
-                $duplicate = $stmt->get_result()->fetch_assoc();
-
-                if ($duplicate) {
-                    $error = 'A payroll record already exists for this employee and period.';
-                    $showForm = true;
-                } else {
-            $stmt = $conn->prepare('INSERT INTO payroll_records(employee_id,period_start,period_end,basic_salary,allowances,other_earnings,deductions,gross_pay,net_pay,status,notes) VALUES(?,?,?,?,?,?,?,?,?,"Draft",?)');
-            $stmt->bind_param('issdddddds', $employeeId, $start, $end, $basic, $allowances, $other, $deductions, $gross, $net, $notes);
-
-            if ($stmt->execute()) {
-                header('Location: payroll.php?saved=1');
-                exit;
-            }
-
-            $error = 'Unable to save the payroll record.';
-            $showForm = true;
-                }
-            }
-        }
-    }
-    }
+        if ($action !== 'advance_status') throw new InvalidArgumentException('Unknown payroll action.');
+        lcc_transition_payroll($conn,(int)($_POST['payroll_id']??0),(string)($_POST['status']??''));
+        header('Location: payroll.php?status_updated=1'); exit;
+    } catch (Throwable $e) { $error=$e->getMessage(); if (($_POST['action'] ?? '') === 'create') $showForm = true; }
 }
+$formValues = (($_POST['action'] ?? '') === 'create') ? $_POST : [];
 
 if (isset($_GET['saved'])) {
     $message = 'Payroll record saved successfully.';
@@ -107,10 +55,19 @@ if (isset($_GET['status_updated'])) {
     $message = 'Payroll status updated.';
 }
 
-$records = $isHr
-    ? $conn->query('SELECT p.payroll_id,p.employee_id,p.period_start,p.period_end,p.status,e.employee_no,e.first_name,e.middle_name,e.last_name,e.department,e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id ORDER BY p.payroll_id DESC')
-    : $conn->query('SELECT p.*,e.employee_no,e.first_name,e.middle_name,e.last_name,e.department,e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id ORDER BY p.payroll_id DESC');
-$employees = $isHr ? false : $conn->query('SELECT employee_id,employee_no,first_name,last_name,basic_salary FROM employees ORDER BY last_name,first_name');
+$filterPeriodId = max(0, (int)($_GET['period_id'] ?? 0));
+$sql = $isHr
+    ? 'SELECT p.payroll_id,p.employee_id,p.period_start,p.period_end,p.status,e.employee_no,e.first_name,e.middle_name,e.last_name,e.department,e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id'
+    : 'SELECT p.*,e.employee_no,e.first_name,e.middle_name,e.last_name,e.department,e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id';
+if ($filterPeriodId > 0) {
+    $stmt = $conn->prepare($sql . ' WHERE p.period_id=? ORDER BY p.payroll_id DESC');
+    $stmt->bind_param('i', $filterPeriodId);
+    $stmt->execute();
+    $records = $stmt->get_result();
+} else {
+    $records = $conn->query($sql . ' ORDER BY p.payroll_id DESC');
+}
+$employees = $isHr ? false : $conn->query("SELECT employee_id,employee_no,first_name,last_name,basic_salary FROM employees WHERE employment_status<>'Archived' ORDER BY last_name,first_name");
 
 /* HR attendance-per-period: one query for the whole list, bucketed in PHP
    (no N+1), so HR can verify attendance logs behind each pay period. */
@@ -160,13 +117,13 @@ if ($isHr && $records && $records->num_rows > 0) {
 <!-- FAVICON: Put your favicon file at /assets/favicon.png -->
 <link rel="icon" type="image/png" href="../assets/favicon.png">
     <title>LCC Payroll System</title>
-    <link rel="stylesheet" href="../assets/css/app.css?v=20260909-rail4">
-    <link rel="stylesheet" href="../assets/css/apple-system.css?v=20260916-apple9">
-    <script src="../assets/js/app.js?v=20260916-rail5" defer></script>
-    <script src="../assets/js/apple-motion.js?v=20260916-apple1" defer></script>
+    <link rel="stylesheet" href="../assets/css/app.css?v=20261014-payroll1">
+    <link rel="stylesheet" href="../assets/css/apple-system.css?v=20261012-ux1">
+    <script src="../assets/js/app.js?v=20261012-nav1" defer></script>
+    <script src="../assets/js/apple-motion.js?v=20261012-nav1" defer></script>
 </head>
 
-<body>
+<body class="lcc-ux">
     <div class="app">
         <?php sidebar('payroll'); ?>
         <main class="main">
@@ -180,22 +137,26 @@ if ($isHr && $records && $records->num_rows > 0) {
                         <p>Verify the attendance logs behind each pay period. Pay figures are handled by Finance.</p>
                         <?php else: ?>
                         <div class="eyebrow">Payroll Management</div>
-                        <h1>All Payroll</h1>
-                        <p>Review existing payroll records first. Add a new payroll only when you are ready.</p>
+                        <h1><?php echo $showForm ? 'Add New Payroll' : 'All Payroll'; ?></h1>
+                        <p>Choose an employee, enter the dates and any extra amounts, then save. Loan and recurring deductions are added automatically.</p>
                         <?php endif; ?>
                     </div>
                     <?php if (!$isHr): ?>
                     <div class="print-tools">
                         <a class="btn btn-secondary" href="reports.php"><?php echo ui_icon('file-chart'); ?> Payroll Reports</a>
-                        <button type="button" class="btn btn-secondary" onclick="window.print()"><?php echo ui_icon('printer'); ?> Print All Payroll</button>
-                        <a class="btn btn-primary" href="payroll.php?add=1"><?php echo ui_icon('plus'); ?> Add New Payroll</a>
+                        <?php if (!$showForm): ?><button type="button" class="btn btn-secondary" onclick="window.print()"><?php echo ui_icon('printer'); ?> Print All Payroll</button><?php endif; ?>
+                        <?php if (!$showForm): ?><a class="btn btn-primary" href="payroll.php?add=1#new-payroll"><?php echo ui_icon('plus'); ?> Add New Payroll</a><?php endif; ?>
                     </div>
                     <?php endif; ?>
                 </div>
 
                 <?php if ($message): ?><div class="notice ok"><?php echo e($message); ?></div><?php endif; ?>
                 <?php if ($error): ?><div class="notice err"><?php echo e($error); ?></div><?php endif; ?>
+                <?php if ($filterPeriodId): ?><div class="lcc-help-strip"><div><strong>Showing one pay period</strong>These are the payroll records for the pay period you opened.</div><a href="payroll.php">Show all payroll →</a></div><?php endif; ?>
 
+                <?php if (!$isHr): ?><div class="lcc-help-strip"><div><strong>Simple payroll</strong>Add a payroll here, review the Draft, then approve it. Record payment only after the employee has actually been paid.</div><a href="recurring_deductions.php">Manage recurring deductions →</a></div><?php endif; ?>
+
+                <?php if (!$showForm): ?>
                 <section class="card payroll-list-card">
                     <div class="card-head">
                         <div>
@@ -235,7 +196,7 @@ if ($isHr && $records && $records->num_rows > 0) {
                                         <?php if ($isHr): ?>
                                         <td colspan="6" class="empty">No payroll periods yet.</td>
                                         <?php else: ?>
-                                        <td colspan="8" class="empty">No payroll records yet. Click <strong>Add New Payroll</strong> to create the first one.</td>
+                                        <td colspan="8" class="empty">No payroll records yet. Select <strong>Add New Payroll</strong> to create the first one.</td>
                                         <?php endif; ?>
                                     </tr>
                                     <?php else: while ($row = $records->fetch_assoc()): ?>
@@ -253,8 +214,8 @@ if ($isHr && $records && $records->num_rows > 0) {
                                             <?php else: ?>
                                             <td><?php echo money($row['gross_pay']); ?></td>
                                             <td><strong><?php echo money($row['net_pay']); ?></strong></td>
-                                            <td><span class="badge"><?php echo e($row['status']); ?></span><form method="post" style="display:inline" onsubmit="return confirm('Update payroll status?')"><?php echo csrf_field(); ?><input type="hidden" name="action" value="update_status"><input type="hidden" name="payroll_id" value="<?php echo (int)$row['payroll_id']; ?>"><select name="status"><option value="Draft"<?php echo $row['status'] === 'Draft' ? ' selected' : ''; ?>>Draft</option><option value="Approved"<?php echo $row['status'] === 'Approved' ? ' selected' : ''; ?>>Approved</option><option value="Paid"<?php echo $row['status'] === 'Paid' ? ' selected' : ''; ?>>Paid</option></select><button type="submit" class="btn btn-secondary">Save</button></form></td>
-                                            <td><div class="icon-actions"><button type="button" class="icon-action print" title="Print payroll statement" aria-label="Print payroll statement" onclick="printPayrollRecord(<?php echo (int)$row['payroll_id']; ?>); return false;"><?php echo ui_icon('printer'); ?></button></div></td>
+                                            <td><span class="badge"><?php echo e($row['status']); ?></span><?php if (!empty($row['period_id']) && in_array($row['status'],['Draft','Approved'],true)): ?><form method="post" style="display:inline" onsubmit="return confirm(<?php echo $row['status']==='Draft' ? "'Approve these amounts and lock this payroll record?'" : "'Confirm that payment has actually been made? This also posts any loan repayment.'"; ?>)"><?php echo csrf_field(); ?><input type="hidden" name="action" value="advance_status"><input type="hidden" name="payroll_id" value="<?php echo (int)$row['payroll_id']; ?>"><input type="hidden" name="status" value="<?php echo $row['status']==='Draft'?'Approved':'Paid'; ?>"><button type="submit" class="btn btn-secondary"><?php echo $row['status']==='Draft'?'Approve payroll':'Record payment'; ?></button></form><?php endif; ?></td>
+                                            <td><button type="button" class="btn btn-secondary btn-small" onclick="printPayrollRecord(<?php echo (int)$row['payroll_id']; ?>); return false;">View / print</button></td>
                                             <?php endif; ?>
                                         </tr>
                                 <?php endwhile;
@@ -273,14 +234,15 @@ if ($isHr && $records && $records->num_rows > 0) {
                 <?php endif; ?>
 
                 <div id="nativePayrollPrintSheet" class="native-print-sheet" aria-hidden="true"></div>
+                <?php endif; ?>
 
     <?php if ($showForm): ?>
-                    <section class="card form-card payroll-form-card">
+                    <section class="card form-card payroll-form-card" id="new-payroll">
                         <div class="card-head">
                             <div>
                                 <div class="eyebrow">New Payroll</div>
                                 <h2>Add New Payroll</h2>
-                                <p>Basic salary is taken automatically from the employee record.</p>
+                                <p>Basic salary comes from the employee record. Active loans and recurring deductions are included when you save.</p>
                             </div>
                             <a class="btn btn-secondary" href="payroll.php">Cancel</a>
                         </div>
@@ -295,29 +257,32 @@ if ($isHr && $records && $records->num_rows > 0) {
                                         <select name="employee_id" id="employee_id" required>
                                             <option value="">Select employee</option>
                                             <?php while ($employee = $employees->fetch_assoc()): ?>
-                                                <option value="<?php echo (int)$employee['employee_id']; ?>" data-salary="<?php echo e($employee['basic_salary']); ?>">
+                                                <option value="<?php echo (int)$employee['employee_id']; ?>" data-salary="<?php echo e($employee['basic_salary']); ?>" <?php echo (int)($formValues['employee_id'] ?? 0) === (int)$employee['employee_id'] ? 'selected' : ''; ?>>
                                                     <?php echo e($employee['employee_no'] . ' — ' . $employee['last_name'] . ', ' . $employee['first_name']); ?>
                                                 </option>
                                             <?php endwhile; ?>
                                         </select>
                                     </div>
-                                    <div class="field"><label>Period Start <span class="required">*</span></label><input type="date" name="period_start" required></div>
-                                    <div class="field"><label>Period End <span class="required">*</span></label><input type="date" name="period_end" required></div>
+                                    <div class="field"><label>Period Start <span class="required">*</span></label><input type="date" name="period_start" value="<?php echo e($formValues['period_start'] ?? ''); ?>" required></div>
+                                    <div class="field"><label>Period End <span class="required">*</span></label><input type="date" name="period_end" value="<?php echo e($formValues['period_end'] ?? ''); ?>" required></div>
+                                    <div class="field"><label>Pay Date <span class="required">*</span></label><input type="date" name="pay_date" id="pay_date" value="<?php echo e($formValues['pay_date'] ?? ''); ?>" required></div>
                                 </div>
 
                                 <div class="section-title">Earnings and Deductions</div>
                                 <div class="form-grid">
                                     <div class="field"><label>Basic Salary</label><input id="basic_salary" value="0.00" disabled></div>
-                                    <div class="field"><label>Allowances</label><input type="number" min="0" step="0.01" name="allowances" id="allowances" value="0"></div>
-                                    <div class="field"><label>Other Earnings</label><input type="number" min="0" step="0.01" name="other_earnings" id="other_earnings" value="0"></div>
-                                    <div class="field"><label>Deductions</label><input type="number" min="0" step="0.01" name="deductions" id="deductions" value="0"></div>
-                                    <div class="field full"><label>Notes</label><textarea name="notes" placeholder="Optional payroll notes"></textarea></div>
+                                    <div class="field"><label>Allowances</label><input type="number" min="0" step="0.01" name="allowances" id="allowances" value="<?php echo e($formValues['allowances'] ?? '0'); ?>"></div>
+                                    <div class="field"><label>Other Earnings</label><input type="number" min="0" step="0.01" name="other_earnings" id="other_earnings" value="<?php echo e($formValues['other_earnings'] ?? '0'); ?>"></div>
+                                    <div class="field"><label>Other Deductions</label><input type="number" min="0" step="0.01" name="deductions" id="deductions" value="<?php echo e($formValues['deductions'] ?? '0'); ?>"><small>Loan installments, SSS, Pag-IBIG and PhilHealth amounts are added automatically.</small></div>
+                                    <div class="field full"><label>Notes</label><textarea name="notes" placeholder="Optional payroll notes"><?php echo e($formValues['notes'] ?? ''); ?></textarea></div>
                                 </div>
 
                                 <div class="pay-preview">
                                     <div><span>Gross Pay</span><strong id="gross">₱ 0.00</strong></div>
-                                    <div><span>Net Pay</span><strong id="net">₱ 0.00</strong></div>
+                                    <div><span>Automatic Deductions</span><strong id="automaticTotal">₱ 0.00</strong></div>
+                                    <div><span>Estimated Net Pay</span><strong id="net">₱ 0.00</strong></div>
                                 </div>
+                                <div class="payroll-auto-breakdown" id="automaticBreakdown">Choose an employee and pay date to see scheduled loan and recurring deductions.</div>
                             </div>
                             <div class="form-actions">
                                 <button class="btn btn-primary" type="submit">✓ Save Payroll</button>
@@ -332,6 +297,9 @@ if ($isHr && $records && $records->num_rows > 0) {
 
     <?php if ($showForm): ?>
         <script>
+            let automaticDeductions = 0;
+            let quoteController;
+            const peso = value => '₱ ' + value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             function updatePay() {
                 const employee = document.getElementById('employee_id');
                 const selected = employee.options[employee.selectedIndex];
@@ -340,20 +308,57 @@ if ($isHr && $records && $records->num_rows > 0) {
                 const other = parseFloat(document.getElementById('other_earnings').value || 0);
                 const deductions = parseFloat(document.getElementById('deductions').value || 0);
                 const gross = basic + allowances + other;
-                const net = gross - deductions;
+                const net = gross - deductions - automaticDeductions;
                 document.getElementById('basic_salary').value = basic.toFixed(2);
-                document.getElementById('gross').textContent = '₱ ' + gross.toLocaleString('en-PH', {
-                    minimumFractionDigits: 2
-                });
-                document.getElementById('net').textContent = '₱ ' + net.toLocaleString('en-PH', {
-                    minimumFractionDigits: 2
-                });
+                document.getElementById('gross').textContent = peso(gross);
+                document.getElementById('automaticTotal').textContent = peso(automaticDeductions);
+                document.getElementById('net').textContent = peso(net);
             }
-            document.getElementById('employee_id').addEventListener('change', updatePay);
+            async function loadAutomaticDeductions() {
+                quoteController?.abort();
+                automaticDeductions = 0;
+                const breakdown = document.getElementById('automaticBreakdown');
+                const employeeId = document.getElementById('employee_id').value;
+                const payDate = document.getElementById('pay_date').value;
+                breakdown.textContent = 'Choose an employee and pay date to see scheduled loan and recurring deductions.';
+                updatePay();
+                if (!employeeId || !payDate) return;
+                quoteController = new AbortController();
+                const controller = quoteController;
+                breakdown.textContent = 'Checking scheduled deductions…';
+                try {
+                    const response = await fetch('payroll.php?quote=1&employee_id=' + encodeURIComponent(employeeId) + '&pay_date=' + encodeURIComponent(payDate), { signal: controller.signal, credentials: 'same-origin' });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Could not check scheduled deductions.');
+                    if (controller.signal.aborted) return;
+                    automaticDeductions = Number(data.total) || 0;
+                    breakdown.replaceChildren();
+                    if (!data.items.length) breakdown.textContent = 'No scheduled deductions for this employee and pay date.';
+                    data.items.forEach(item => {
+                        const row = document.createElement('div');
+                        const label = document.createElement('span');
+                        const amount = document.createElement('strong');
+                        label.textContent = item.name;
+                        amount.textContent = peso(Number(item.amount));
+                        row.append(label, amount);
+                        breakdown.append(row);
+                    });
+                    updatePay();
+                } catch (error) {
+                    if (!controller.signal.aborted) breakdown.textContent = error.message;
+                }
+            }
+            document.getElementById('employee_id').addEventListener('change', loadAutomaticDeductions);
+            document.getElementById('pay_date').addEventListener('change', loadAutomaticDeductions);
+            document.querySelector('[name="period_end"]').addEventListener('change', function () {
+                const payDate = document.getElementById('pay_date');
+                if (!payDate.value) { payDate.value = this.value; loadAutomaticDeductions(); }
+            });
             document.getElementById('allowances').addEventListener('input', updatePay);
             document.getElementById('other_earnings').addEventListener('input', updatePay);
             document.getElementById('deductions').addEventListener('input', updatePay);
             updatePay();
+            loadAutomaticDeductions();
         </script>
     <?php endif; ?>
 <script>

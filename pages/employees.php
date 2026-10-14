@@ -3,23 +3,19 @@ require_once __DIR__ . '/../includes/auth.php';
 require_role('superadmin', 'hr');
 require_once __DIR__ . '/../includes/layout.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['archive','restore'], true)) {
     require_csrf();
     $deleteId = (int)($_POST['employee_id'] ?? 0);
-    if ($deleteId > 0) {
-    $stmt = $conn->prepare('SELECT photo_path FROM employees WHERE employee_id=? LIMIT 1');
-    $stmt->bind_param('i', $deleteId);
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-
-    $stmt = $conn->prepare('DELETE FROM employees WHERE employee_id=?');
-    $stmt->bind_param('i', $deleteId);
-    $stmt->execute();
-
-    if ($row) delete_employee_photo($row['photo_path']);
+    if ($deleteId <= 0) { http_response_code(400); exit('Invalid employee.'); }
+    if ($_POST['action'] === 'restore') {
+        require_role('superadmin');
+        $stmt = $conn->prepare("UPDATE employees SET employment_status='Regular',archived_at=NULL WHERE employee_id=? AND employment_status='Archived'");
+    } else {
+        $stmt = $conn->prepare("UPDATE employees SET employment_status='Archived',archived_at=NOW() WHERE employee_id=? AND employment_status<>'Archived'");
     }
-
-    header('Location: employees.php?deleted=1');
+    $stmt->bind_param('i', $deleteId);
+    if (!$stmt->execute() || $stmt->affected_rows !== 1) { http_response_code(409); exit('Employee status could not be changed.'); }
+    header('Location: employees.php?updated=1');
     exit;
 }
 
@@ -46,7 +42,7 @@ if ($search !== '') {
     }
 }
 
-$sql = "SELECT employee_id,employee_no,first_name,middle_name,last_name,photo_path,department,position,employment_status,basic_salary,created_at FROM employees $where ORDER BY last_name,first_name";
+$sql = "SELECT employee_id,employee_no,first_name,middle_name,last_name,photo_path,department,position,employment_status,created_at FROM employees $where ORDER BY last_name,first_name";
 $stmt = $conn->prepare($sql);
 if ($params) $stmt->bind_param($types, ...$params);
 $stmt->execute();
@@ -79,10 +75,10 @@ if ($recent) while ($r = $recent->fetch_assoc()) $recentEmployees[] = $r;
 <!-- FAVICON: Put your favicon file at /assets/favicon.png -->
 <link rel="icon" type="image/png" href="../assets/favicon.png">
     <title>LCC Payroll System</title>
-    <link rel="stylesheet" href="../assets/css/app.css?v=20260909-rail4">
+    <link rel="stylesheet" href="../assets/css/app.css?v=20261012-nav1">
     <link rel="stylesheet" href="../assets/css/apple-system.css?v=20260916-apple9">
-    <script src="../assets/js/app.js?v=20260916-rail5" defer></script>
-    <script src="../assets/js/apple-motion.js?v=20260916-apple1" defer></script>
+    <script src="../assets/js/app.js?v=20261012-nav1" defer></script>
+    <script src="../assets/js/apple-motion.js?v=20261012-nav1" defer></script>
 </head>
 <body>
 <div class="app">
@@ -102,7 +98,7 @@ if ($recent) while ($r = $recent->fetch_assoc()) $recentEmployees[] = $r;
                 </div>
             </div>
 
-            <?php if (isset($_GET['deleted'])): ?><div class="notice ok">Employee deleted successfully.</div><?php endif; ?>
+            <?php if (isset($_GET['updated'])): ?><div class="notice ok">Employee status updated.</div><?php endif; ?>
             <?php if (isset($_GET['error']) && $_GET['error'] === 'notfound'): ?><div class="notice err">The employee could not be found.</div><?php endif; ?>
 
             <section class="card" style="overflow:hidden">
@@ -121,7 +117,7 @@ if ($recent) while ($r = $recent->fetch_assoc()) $recentEmployees[] = $r;
                         <h2>Employee List</h2>
                         <p><?php echo count($employees); ?> employee<?php echo count($employees) === 1 ? '' : 's'; ?> found.</p>
                     </div>
-                    <div class="table-legend"><span><?php echo ui_icon('eye'); ?> View</span><span><?php echo ui_icon('wallet'); ?> Salary</span><span><?php echo ui_icon('pencil'); ?> Edit</span><span><?php echo ui_icon('trash'); ?> Delete</span></div>
+                    <div class="table-legend"><span><?php echo ui_icon('eye'); ?> View</span><?php if (is_superadmin()): ?><span><?php echo ui_icon('wallet'); ?> Salary</span><?php endif; ?><span><?php echo ui_icon('pencil'); ?> Edit</span><span><?php echo ui_icon('trash'); ?> Archive</span></div>
                 </div>
                 <div class="table-wrap">
                     <table class="table employee-table">
@@ -132,7 +128,7 @@ if ($recent) while ($r = $recent->fetch_assoc()) $recentEmployees[] = $r;
                         <?php else: foreach ($employees as $row): ?>
                             <tr>
                                 <td><div class="person-cell">
-                                    <?php if (!empty($row['photo_path'])): ?><img class="list-photo" src="../<?php echo e(ltrim($row['photo_path'], '/')); ?>" alt="">
+                                    <?php if (!empty($row['photo_path'])): ?><img class="list-photo" src="../employee_photo.php?id=<?php echo (int)$row['employee_id']; ?>" alt="">
                                     <?php else: ?><div class="list-avatar"><?php echo e(strtoupper(substr($row['first_name'], 0, 1) . substr($row['last_name'], 0, 1))); ?></div><?php endif; ?>
                                     <div><strong><?php echo e(employee_full_name_last_first($row)); ?></strong><div class="mini"><?php echo e($row['employment_status']); ?></div></div>
                                 </div></td>
@@ -143,9 +139,9 @@ if ($recent) while ($r = $recent->fetch_assoc()) $recentEmployees[] = $r;
                                 <td class="action-col">
                                     <div class="icon-actions">
                                         <button type="button" class="icon-action view" title="View employee record" aria-label="View employee record" onclick="openEmployeePreview(<?php echo (int)$row['employee_id']; ?>)"><?php echo ui_icon('eye'); ?></button>
-                                        <button type="button" class="icon-action salary" title="View salary information" aria-label="View salary information" onclick="openSalaryModal(<?php echo (int)$row['employee_id']; ?>)"><?php echo ui_icon('wallet'); ?></button><form method="post" action="../employee/login.php" target="_blank" style="display:inline"><?php echo csrf_field(); ?><input type="hidden" name="action" value="admin_preview"><input type="hidden" name="employee_no" value="<?php echo e($row['employee_no']); ?>"><button type="submit" class="icon-action" title="Open employee portal" aria-label="Open employee portal">↗</button></form>
+                                        <?php if (is_superadmin()): ?><button type="button" class="icon-action salary" title="View salary information" aria-label="View salary information" onclick="openSalaryModal(<?php echo (int)$row['employee_id']; ?>)"><?php echo ui_icon('wallet'); ?></button><?php endif; ?><a class="icon-action" href="portal_preview.php?id=<?php echo (int)$row['employee_id']; ?>" target="_blank" rel="noopener" title="Read-only portal preview" aria-label="Read-only portal preview">↗</a>
                                         <a class="icon-action edit" title="Edit employee" aria-label="Edit employee" href="personalinfo.php?edit=<?php echo (int)$row['employee_id']; ?>"><?php echo ui_icon('pencil'); ?></a>
-                                        <form method="post" action="employees.php" style="display:inline" onsubmit="return confirm('Delete this employee? This cannot be undone.')"><?php echo csrf_field(); ?><input type="hidden" name="action" value="delete"><input type="hidden" name="employee_id" value="<?php echo (int)$row['employee_id']; ?>"><button type="submit" class="icon-action delete" title="Delete employee" aria-label="Delete employee"><?php echo ui_icon('trash'); ?></button></form>
+                                        <form method="post" action="employees.php" style="display:inline" onsubmit="return confirm('Change this employee archive status?')"><?php echo csrf_field(); ?><input type="hidden" name="action" value="<?php echo $row['employment_status']==='Archived' ? 'restore' : 'archive'; ?>"><input type="hidden" name="employee_id" value="<?php echo (int)$row['employee_id']; ?>"><button type="submit" class="icon-action delete" title="<?php echo $row['employment_status']==='Archived' ? 'Restore employee' : 'Archive employee'; ?>" aria-label="<?php echo $row['employment_status']==='Archived' ? 'Restore employee' : 'Archive employee'; ?>" <?php echo $row['employment_status']==='Archived' && !is_superadmin() ? 'disabled' : ''; ?>><?php echo ui_icon('trash'); ?></button></form>
                                     </div>
                                 </td>
                             </tr>

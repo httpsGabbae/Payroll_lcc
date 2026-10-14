@@ -3,8 +3,8 @@
 // Fill via environment variables on hosting, or edit the defaults for local dev.
 // SQL to run once: supabase_schema.sql (Supabase Dashboard > SQL Editor).
 
-$SUPABASE_URL = getenv('SUPABASE_URL') ?: 'https://htlbmhkseweclwlixzlz.supabase.co';
-$SUPABASE_PUBLISHABLE_KEY = getenv('SUPABASE_PUBLISHABLE_KEY') ?: 'sb_publishable_zQGus9OPXs2WB9SJ5tahTA_NIVRurF3';
+$SUPABASE_URL = getenv('SUPABASE_URL') ?: '';
+$SUPABASE_PUBLISHABLE_KEY = getenv('SUPABASE_PUBLISHABLE_KEY') ?: '';
 
 // Direct Postgres connection (PHP PDO). Requires the database password from
 // Supabase Dashboard > Project Settings > Database. Pooling (port 6543) is

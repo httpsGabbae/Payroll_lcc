@@ -8,8 +8,8 @@ if (!preg_match('/^\d{4}-\d{2}$/', $month)) $month = date('Y-m');
 $monthStart = $month . '-01';
 $monthEnd = date('Y-m-t', strtotime($monthStart));
 
-$stmt = $conn->prepare('SELECT p.*,e.employee_no,e.first_name,e.last_name,e.department,e.position FROM payroll_records p JOIN employees e ON e.employee_id=p.employee_id WHERE p.period_start <= ? AND p.period_end >= ? ORDER BY e.last_name,e.first_name,p.period_end');
-$stmt->bind_param('ss', $monthEnd, $monthStart);
+$stmt = $conn->prepare('SELECT p.*,pp.pay_date,e.employee_no,e.first_name,e.last_name,e.department,e.position FROM payroll_records p JOIN payroll_periods pp ON pp.period_id=p.period_id JOIN employees e ON e.employee_id=p.employee_id WHERE pp.pay_date BETWEEN ? AND ? ORDER BY e.last_name,e.first_name,pp.pay_date');
+$stmt->bind_param('ss', $monthStart, $monthEnd);
 $stmt->execute();
 $result = $stmt->get_result();
 $rows = [];
@@ -37,7 +37,7 @@ for ($i = 5; $i >= 0; $i--) {
 }
 $trendStart = array_key_first($trend) . '-01';
 $trendEnd = date('Y-m-t', strtotime($monthStart));
-$trendStmt = $conn->prepare("SELECT EXTRACT(YEAR FROM period_end) AS y, EXTRACT(MONTH FROM period_end) AS m, COALESCE(SUM(gross_pay),0) AS gross, COALESCE(SUM(net_pay),0) AS net FROM payroll_records WHERE period_end BETWEEN ? AND ? GROUP BY EXTRACT(YEAR FROM period_end), EXTRACT(MONTH FROM period_end) ORDER BY y, m");
+$trendStmt = $conn->prepare("SELECT EXTRACT(YEAR FROM pp.pay_date) AS y, EXTRACT(MONTH FROM pp.pay_date) AS m, COALESCE(SUM(p.gross_pay),0) AS gross, COALESCE(SUM(p.net_pay),0) AS net FROM payroll_records p JOIN payroll_periods pp ON pp.period_id=p.period_id WHERE pp.pay_date BETWEEN ? AND ? GROUP BY EXTRACT(YEAR FROM pp.pay_date), EXTRACT(MONTH FROM pp.pay_date) ORDER BY y, m");
 $trendStmt->bind_param('ss', $trendStart, $trendEnd);
 $trendStmt->execute();
 $trendResult = $trendStmt->get_result();
@@ -68,7 +68,7 @@ class MonthlyPayrollPDF extends FPDF
         $this->SetXY(45, 11);
         $this->SetFont('Arial', 'B', 17);
         $this->SetTextColor(6, 59, 70);
-        $this->Cell(0, 7, pdf_text('PAYWISE'), 0, 1, 'L');
+        $this->Cell(0, 7, pdf_text('LIPA CITY COLLEGES PAYROLL SYSTEM'), 0, 1, 'L');
         $this->SetX(45);
         $this->SetFont('Arial', 'B', 10);
         $this->SetTextColor(15, 127, 123);
@@ -93,11 +93,11 @@ class MonthlyPayrollPDF extends FPDF
         $this->SetY(-12);
         $this->SetFont('Arial', '', 7);
         $this->SetTextColor(110, 123, 128);
-        $this->Cell(0, 6, pdf_text('Private and Confidential · Paywise · Page ' . $this->PageNo() . ' of {nb}'), 0, 0, 'C');
+        $this->Cell(0, 6, pdf_text('Private and Confidential · LCC Payroll System · Page ' . $this->PageNo() . ' of {nb}'), 0, 0, 'C');
     }
 }
 
-$reportSubtitle = date('F Y', strtotime($monthStart)) . ' · payroll period register';
+$reportSubtitle = date('F Y', strtotime($monthStart)) . ' · by actual pay date';
 $pdf = new MonthlyPayrollPDF('L', 'mm', 'A4');
 $pdf->AliasNbPages();
 $pdf->SetMargins(12, 10, 12);
@@ -202,7 +202,7 @@ foreach ($headers as $i => $h) $pdf->Cell($widths[$i], 8, pdf_text($h), 1, $i ==
 $pdf->SetTextColor(23, 50, 59);
 $pdf->SetFont('Arial', '', 7.1);
 if (!$rows) {
-    $pdf->Cell(array_sum($widths), 10, pdf_text('No payroll records overlap this month.'), 1, 1, 'C');
+    $pdf->Cell(array_sum($widths), 10, pdf_text('No payroll records have a pay date in this month.'), 1, 1, 'C');
 } else foreach ($rows as $idx => $row) {
     if ($idx % 2 === 0) $pdf->SetFillColor(248, 251, 251);
     else $pdf->SetFillColor(255, 255, 255);

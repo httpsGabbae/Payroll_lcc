@@ -13,9 +13,9 @@
         link.setAttribute('data-apple-system', '1');
         document.head.appendChild(link);
     }
-    if (!document.querySelector('script[data-apple-motion]')) {
+    if (!document.querySelector('script[src*="assets/js/apple-motion.js"]')) {
         var sc = document.createElement('script');
-        sc.src = root + 'js/apple-motion.js?v=20260916-apple1';
+        sc.src = root + 'js/apple-motion.js?v=20261012-nav1';
         sc.defer = true;
         sc.setAttribute('data-apple-motion', '1');
         document.head.appendChild(sc);
@@ -86,8 +86,31 @@ document.addEventListener('DOMContentLoaded', function () {
     // current rail/drawer state across the page navigation. This prevents a
     // tap on Dashboard, Employees, Attendance, Payroll, etc. from briefly
     // opening the drawer and then collapsing it again.
-    document.querySelectorAll('.sidebar .nav-link, .employee-sidebar .nav-link').forEach(function (link) {
-        link.addEventListener('click', function () {
+    const sidebarNav = sidebar?.querySelector('.nav');
+    if (sidebarNav) {
+        try {
+            sidebarNav.scrollTop = Number(sessionStorage.getItem('lccSidebarScrollTop')) || 0;
+            sidebarNav.scrollLeft = Number(sessionStorage.getItem('lccSidebarScrollLeft')) || 0;
+        } catch (error) { /* Storage may be disabled. */ }
+        sidebarNav.addEventListener('scroll', function () {
+            try {
+                sessionStorage.setItem('lccSidebarScrollTop', String(sidebarNav.scrollTop));
+                sessionStorage.setItem('lccSidebarScrollLeft', String(sidebarNav.scrollLeft));
+            } catch (error) { /* Storage may be disabled. */ }
+        }, { passive: true });
+    }
+
+    document.querySelectorAll('.sidebar a[href], .employee-sidebar .nav-link').forEach(function (link) {
+        link.addEventListener('click', function (event) {
+            if (sidebar?.contains(link) && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+                try {
+                    sessionStorage.setItem('lccSidebarNavigation', '1');
+                    if (sidebarNav) {
+                        sessionStorage.setItem('lccSidebarScrollTop', String(sidebarNav.scrollTop));
+                        sessionStorage.setItem('lccSidebarScrollLeft', String(sidebarNav.scrollLeft));
+                    }
+                } catch (error) { /* Storage may be disabled. */ }
+            }
             if (!isMobile()) return;
             const collapsed = body.classList.contains('sidebar-collapsed');
             localStorage.setItem('lccMobileSidebarExpanded', collapsed ? 'false' : 'true');

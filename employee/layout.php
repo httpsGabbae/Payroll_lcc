@@ -5,13 +5,13 @@ function emp_icon(string $name): string {
 }
 function employee_sidebar(string $active): void {
     echo '<script>try{var _b=document.body,_m=window.matchMedia("(max-width: 820px)").matches;if(_m){if(localStorage.getItem("lccMobileSidebarExpanded")!=="true")_b.classList.add("sidebar-collapsed");}else if(localStorage.getItem("lccSidebarCollapsed")==="true")_b.classList.add("sidebar-collapsed");if(localStorage.getItem("lccTheme")==="dark")_b.classList.add("dark-mode");}catch(_e){}</script>';
-    $items=[['dashboard','dashboard','Dashboard','dashboard.php'],['profile','user','My Profile','profile.php'],['payroll','wallet','My Payroll','payroll.php'],['attendance','dashboard','Attendance','attendance.php']];
+    $items=[['dashboard','dashboard','Dashboard','dashboard.php'],['profile','user','My Profile','profile.php'],['payroll','wallet','My Payroll','payroll.php'],['attendance','dashboard','Attendance','attendance.php'],['loans','wallet','My Loans','loans.php']];
     echo '<aside class="sidebar employee-sidebar" id="appSidebar"><button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar">←</button><a class="brand" href="dashboard.php"><img class="brand-logo" src="../uploads/logo.png" alt="LCC Payroll"><div class="brand-text"><div class="brand-title">LCC PAYROLL</div><div class="brand-sub">EMPLOYEE PORTAL</div></div></a><nav class="nav">';
-    foreach($items as $item){$a=$active===$item[0]?' active':'';echo '<a class="nav-link mobile-priority'.$a.'" href="'.e($item[3]).'" title="'.e($item[2]).'" data-nav-title="'.e($item[2]).'"><span class="nav-icon">'.emp_icon($item[1]).'</span><span class="nav-label">'.e($item[2]).'</span></a>';}
+    foreach($items as $item){$a=$active===$item[0]?' active':'';$mobile=$item[0]==='loans'?' mobile-secondary':' mobile-priority';echo '<a class="nav-link'.$mobile.$a.'" href="'.e($item[3]).'" title="'.e($item[2]).'" data-nav-title="'.e($item[2]).'"><span class="nav-icon">'.emp_icon($item[1]).'</span><span class="nav-label">'.e($item[2]).'</span></a>';}
     echo '</nav><div class="employee-side-footer"><a class="nav-link mobile-secondary" href="logout.php" title="Logout" data-nav-title="Logout"><span class="nav-icon">'.emp_icon('logout').'</span><span class="nav-label">Logout</span></a></div>';
     echo '<div class="mobile-more-wrap employee-more-wrap">';
     echo '<button type="button" class="mobile-more-toggle" aria-expanded="false" aria-label="More navigation"><span class="nav-icon">⋯</span><span class="nav-label">More</span></button>';
-    echo '<div class="mobile-more-menu" role="menu"><a href="change_password.php" role="menuitem"><span>'.emp_icon('lock').'</span>Change Password</a><a href="logout.php" role="menuitem"><span>'.emp_icon('logout').'</span>Logout</a></div></div></aside>';
+    echo '<div class="mobile-more-menu" role="menu"><a href="loans.php" role="menuitem"><span>'.emp_icon('wallet').'</span>My Loans</a><a href="change_password.php" role="menuitem"><span>'.emp_icon('lock').'</span>Change Password</a><a href="logout.php" role="menuitem"><span>'.emp_icon('logout').'</span>Logout</a></div></div></aside>';
 }
 function employee_topbar(string $title): void {
     $name=$_SESSION['employee_name']??'Employee'; $initial=strtoupper(substr(trim($name),0,1))?:'E';

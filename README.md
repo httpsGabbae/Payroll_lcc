@@ -1,160 +1,78 @@
-# Paywise — Payroll & HR Workspace
+# Lipa City Colleges Payroll System
 
-A web-based employee + payroll workspace: one admin app for people, attendance, pay, reports, and print-ready records — plus a self-service portal for employees.
+This is an independent, school-specific edition based on the original Paywise Payroll System. It is for academic demonstration and evaluation. Lipa City Colleges has not been represented as having approved, adopted, or deployed it. The original Paywise checkout at `D:\Xampp\htdocs\new_payroll` is separate and remains unchanged.
 
-Built with plain PHP + MySQLi. No framework, no build step. Runs under XAMPP.
+The application is plain PHP 8.2, MariaDB/MySQL, server-rendered HTML, the existing Paywise CSS and JavaScript, and FPDF under `vendor/`. It keeps the existing admin dashboard, employee portal, responsive navigation, dark mode, and print conventions.
 
-- Admin entry: `index.html` → `login.php` → `pages/admin_dashboard.php`
-- Employee portal entry: `employee/login.php`
-- Detailed product spec lives in [`docs/README.md`](docs/README.md)
+## Location and isolation
 
-## Features
+- School application: `D:\Xampp\htdocs\paywise-lcc`
+- School database: `paywise_lcc_edition`. The suggested `lcc_payroll` name was already in use and was not changed.
+- School URL: `http://localhost/paywise-lcc/`
+- School cookie: `LCC_PAYROLL_SESSID`, scoped to `/paywise-lcc/`; session files use a distinct `lcc-payroll-sessions` temporary directory.
+- Employee uploads resolve under this application's own `uploads/` directory.
+- `LCC_DB_NAME` is intentionally independent of `DB_NAME`; the application refuses the known original database names and checks an LCC edition marker before serving data.
 
-**Admin**
-- Workforce dashboard: active headcount, today's check-ins, this month's payroll, needs-attention flags (late / missing department / missing salary)
-- Employee directory: searchable/sortable, photos + avatars, full dossier record (identity, contact, government IDs SSS/PhilHealth/Pag-IBIG/TIN/ATM, employment, emergency contact, dependents, education, references)
-- Departments & positions: CRUD, per-department identity colors, positions scoped per department, safe-delete (refused when in use)
-- Attendance: daily records with filters and late/present/absent/leave/half-day badges, printable report
-- Payroll processing: per-employee pay periods, allowances / other earnings / deductions, Draft → Approved → Paid lifecycle, payslip preview
-- Monthly reports: month picker, totals (records, gross, deductions, net, paid count), department breakdown, 6-month Gross-vs-Net trend
-- Print & PDF: single employee, directory, all profiles, single payslip, all payroll, monthly report (FPDF) + browser-print views
-- Responsive desktop + 360px mobile, light + dark mode
+**Privacy item before deployment:** the Git clone included three tracked employee photo files in `uploads/employee_photos/`. An attempted removal was rejected by the execution approval system, so they remain in the copy. That directory has a temporary Apache deny rule, which also prevents newly uploaded photos from displaying. Remove and review the copied files with authorized access, then remove that deny rule when the directory contains only approved school-edition uploads. No live employee or payroll database was copied.
 
-**Employee self-service portal (`employee/`)**
-- Dashboard with today's attendance state, recent payroll, profile completeness
-- One-click Time In / Time Out with live clock
-- Read-only profile, personal payroll history + print, attendance history + print, password change
+## Fresh XAMPP setup
 
-## Tech stack
+The database on this machine has already been initialized. On another host:
 
-| Layer | Choice |
-|---|---|
-| Language | Plain PHP (8.x, tested on 8.2) + MySQLi |
-| Database | MySQL / MariaDB (XAMPP defaults), timezone `Asia/Manila` |
-| PDFs | FPDF via Composer (`setasign/fpdf`, committed under `vendor/`) |
-| Frontend | Server-rendered PHP + page CSS under `assets/css/`, `assets/js/` |
-| No | No framework, no router, no tests/lint/CI |
+1. Verify that `paywise_lcc_edition` does not exist and that you have a backup of any existing payroll databases. Never import these files into the original Paywise database.
+2. Obtain the SQL setup files from the private local deployment copy. They are excluded from Git and blocked from HTTP access. Import `paywise_schema.sql`. It creates `paywise_lcc_edition` and fails if that database already exists. Alternatively, create a **new empty** LCC database with your chosen name and import `schema.sql` into it.
+3. In the school database, import `migrate_to_lcc.sql` to seed the college departments and positions, then import `lcc_migration.sql` once. Do not run `migrate_to_lcc.sql` on an existing populated school database without reviewing its position replacement and employee department remapping.
+4. Set `LCC_DB_HOST`, `LCC_DB_USER`, `LCC_DB_PASS`, and `LCC_DB_NAME` in the Apache/PHP environment if the defaults are unsuitable. `.env.example` documents the names but is not automatically loaded. The default MySQL host/user/password are `localhost` / `root` / empty, as in local XAMPP.
+5. Run `D:\Xampp\php\php.exe D:\Xampp\htdocs\paywise-lcc\setup_admin.php` in a local terminal. It creates the first independent superadmin and prompts for a password of at least 12 characters. Password input is visible in that terminal, so use a private local session. This one-time script refuses to run over HTTP and refuses a second administrator.
+6. Open `http://localhost/paywise-lcc/login.php`. Employees use `http://localhost/paywise-lcc/employee/login.php` after HR assigns a portal password.
 
-## Requirements
+No default administrator or employee credentials are shipped in the LCC fresh-install schema.
 
-- XAMPP (Apache + MySQL + PHP 8.x) or equivalent PHP + MySQL host
-- phpMyAdmin (for one-click SQL import) or MySQL CLI
-- Composer only if you need to reinstall `vendor/` (FPDF is already committed)
+## Upgrade of an existing LCC edition database
 
-## Quick start (5 minutes)
+Back up the **school database only**, for example with `D:\Xampp\mysql\bin\mysqldump.exe -uroot --single-transaction --routines paywise_lcc_edition > lcc_backup.sql` from a trusted local terminal. Verify the backup file and keep a second copy. Check for duplicate `(employee_id, period_start, period_end)` payroll rows and reconcile them where possible. Run `lcc_migration.sql` once against the school database. It adds the period, loan, adjustment, schedule and audit tables; archives employees instead of deleting them; and links one historical payroll row per employee/date pair to a matching legacy period. Duplicate legacy rows remain untouched and unlinked for manual review. It does not change historical financial totals or invent historical pay dates. MariaDB DDL commits independently; restore the verified backup to a newly created school database if migration fails. Never rerun a partly applied migration.
 
-1. **Place the app in the docroot**
-   - Copy this folder into XAMPP's `htdocs/`, e.g. `D:\Xampp\htdocs\Pay-wise`
-   - Start Apache + MySQL in the XAMPP Control Panel.
+`schema.sql` and `paywise_schema.sql` are **fresh install files**, not upgrade scripts. `migrate_to_lcc.sql` is also intended only for fresh installation in this edition unless its effects on existing school data have been reviewed.
 
-2. **Create the database** — pick ONE:
-   - **Easiest (self-contained):** in phpMyAdmin click Import → choose `paywise_schema.sql` → Go. It creates the `paywise_payroll` database itself. Nothing to create first.
-   - **Alternative:** create an empty `paywise_payroll` database first, then import `schema.sql` (same tables, no `CREATE DATABASE`).
-   - Fresh installs only — never import over an old database unless you intend to replace it (the files contain `DROP TABLE`).
+## Workflow and calculation rules
 
-3. **Check the DB connection** in `config/database.php`:
-   ```php
-   $dbHost = 'localhost'; $dbUser = 'root'; $dbPass = ''; $dbName = 'paywise_payroll';
-   ```
-   Timezone is forced to `Asia/Manila` (`+08:00`) in both PHP and MySQL.
+1. HR manages employees, departments, positions, daily attendance, work schedules, attendance correction reasons, and overtime minute approvals. Finance and superadmins can view attendance summaries. Minutes alone do not create money movements.
+2. Finance sets an explicit compensation basis and base amount in **Compensation**. Automatic generation currently accepts `per_period` only. Monthly, semimonthly, daily and hourly bases are stored but blocked until approved conversion policies are implemented.
+3. Finance creates a payroll period with start, end and actual pay date. Overlaps are rejected. Income and deduction types, itemized entries, loan types, and employee loans can then be entered. Adjustments must be complete before that employee's Draft is generated.
+4. Finance generates one or all configured employees. Draft generation recalculates the same record without posting loan repayments. It snapshots base pay, itemized adjustments and proposed loan installments. A changed compensation amount or attendance record marks an affected Draft stale; a changed loan status marks relevant Drafts stale. Regenerate before approval.
+5. Allowed status flow is **Draft → Approved → Paid**. Approved and Paid records are locked from ordinary recalculation. Paid posts each linked loan installment exactly once in a transaction. Every financial status change and repayment is audited.
 
-4. **Open the app**
-   - Admin: `http://localhost/Pay-wise/` (redirects to `login.php`)
-   - Employee portal: `http://localhost/Pay-wise/employee/login.php`
+Amounts are calculated in integer centavos. For the supported `per_period` basis:
 
-5. **(Optional) Reinstall PDFs lib**
-   ```sh
-   composer install
-   ```
+`gross = base pay + active itemized income`
 
-6. **Verify a change**
-   ```sh
-   php -l pages/payroll.php
-   ```
-   Then load the page manually. There is no test suite.
+`deductions = active itemized deductions + proposed active-loan installments`
 
-## Logins
+`net = gross − deductions`
 
-| Role | Credential | Notes |
-|---|---|---|
-| Admin — Superadmin | full access + manages accounts (`pages/accounts.php`) | everything, user management |
-| Admin — Finance | payroll, salary, reports | no employee directory, no user management |
-| Admin — HR | employees, attendance, departments, payroll (masked: attendance shown, ₱ figures hidden) | no pay figures, no reports, read-only payroll |
-| Employee | own profile, pay history, attendance, password | only own rows (SQL-scoped) |
+The loan installment is capped at the unposted balance after accounting for approved reservations. A payroll whose deductions exceed gross pay is rejected. Loan balance is principal less posted repayments; no interest, penalty, statutory contribution, tax rate, or wage conversion is inferred.
 
-There is no self-registration: accounts are created by a superadmin. New installs seed one superadmin (`admin`); existing databases run `migrate_roles.sql` once to add the role columns (current admins become superadmin).
-| Employee (seeded sample) | `25-0001` / `Employee@123` | Available on a fresh import; password changeable in the portal. |
+Attendance review calculates late minutes from expected in time plus grace, undertime from expected out time, and recorded overtime from actual out time. Overtime requires explicit approval. No lateness, leave, absence, holiday, overtime, or statutory amount is automatically turned into pay without an approved school policy and authorized adjustment. Overnight shifts and break policies need additional configuration before automated calculations.
 
-## How it works
+## Reporting and printing
 
-**Payroll math** (`pages/payroll.php`) — the core transaction:
-- `gross = basic_salary (always read from the employee record, never from POST) + allowances + other_earnings`
-- `net = gross − deductions`
-- Guards enforced server-side: no negatives, `deductions ≤ gross`, `period_end ≥ period_start`, no duplicate `(employee_id, period_start, period_end)`
-- Status moves only through the `update_status` action: `Draft → Approved → Paid`
+Monthly reports use **actual pay date**. Historical records with unknown pay dates are retained in Payroll Records and omitted from payment-month totals; they are not assigned a fabricated date. Report totals include all displayed statuses, so Draft and Approved amounts must not be treated as disbursed. Payslips and browser print previews use the payroll snapshot and show itemized lines where they exist. Legacy aggregate-only rows remain aggregate-only. The employee portal shows only the signed-in employee's payroll and loan history.
 
-**Monthly reports** include pay periods overlapping the month (`period_start <= monthEnd AND period_end >= monthStart`), so a period spanning two months appears in both.
+## Roles and security
 
-**Employee numbers** auto-generate as `PREFIX-NNNN` (default `25-NNNN`) via `next_employee_no()`, configurable through `app_settings` keys `employee_number_prefix` / `employee_number_digits`.
+- Superadmin: account management, HR and finance workflows.
+- Finance: compensation, periods, adjustments, loans, payroll approval/payment, financial reports, and read-only attendance summaries.
+- HR: employee records, departments/positions, attendance and schedules, and masked payroll attendance view. Financial PDF endpoints are denied.
+- Employee: own profile, attendance, payroll and loan history.
 
-**Employment status** always uses `active_employment_statuses()` / `is_active_employment_status()` — never a hardcoded list. Inactive/separated staff are excluded from active counts but never deleted silently.
+All state-changing application forms use CSRF tokens. Financial writes use parameterized SQL and transactions. The admin employee preview is a dedicated read-only route and never creates an employee session. Employee archiving preserves payroll history; only a superadmin can restore an archived employee. The database foreign key restricts deletion of employees with payroll records.
 
-**Money formatting:** `money()` (`₱ …`) for HTML, `pdf_money()` (`PHP …`) for FPDF — the `₱` glyph cannot render in PDFs, so never put it there.
+## Verification
 
-**Photos:** use `upload_employee_photo()` / `delete_employee_photo()` (2MB max, JPG/PNG + `getimagesize` check, `uploads/employee_photos/emp_…` naming, old-file cleanup). Logos: `uploads/logo.png` (layout + PDFs), `uploads/logo1.jpg` (login page).
+`verify_lcc.php` requires a disposable database name containing `_test_` and checks overlap rejection, the ₱15,000 + ₱500 − ₱200 − ₱1,000 = ₱14,300 example, Draft regeneration, status locking, single loan posting, balance reconciliation and negative amount rejection. `smoke_lcc.php` renders administrator and employee pages against a disposable database. PHP syntax checks, fresh MariaDB imports, the financial integration test, 20 page renders, administrator and employee payslip PDF rendering, and login-page browser inspection were run during this build. Full browser interaction, dark-mode visual regression, institutional policy validation, penetration testing, and backup restoration have not been completed.
 
-## Project structure
+Actual college adoption requires formal authorization, confirmed compensation and statutory rules, privacy review, backup and recovery drills, security testing, user acceptance testing, and authorized migration of legitimate data.
 
-```
-index.html / login.php        Admin entry + login form (POSTs to auth/login.php)
-auth/                         Admin login, logout, password change (min 8 chars)
-config/database.php           DB connection + shared helpers: e(), money(), CSRF, statuses
-includes/auth.php             Admin session gate (require first on protected admin pages)
-includes/layout.php           Shared UI: sidebar(), topbar(), tutorial(), ui_icon()
-includes/pdf.php              Shared FPDF helpers: pdf_header(), pdf_footer(), row helpers
-pages/                        Admin screens: dashboard, employees, departments,
-                              positions, attendance, payroll, reports, previews
-employee/                     Standalone portal (own auth.php, layout.php, session key
-                              $_SESSION['employee_id'], active-status check)
-print/                        FPDF documents (require includes/auth.php + includes/pdf.php)
-assets/css|js                 Design system + page styles (bump ?v= when changing)
-uploads/                      Employee photos, logos (writable by web server)
-paywise_schema.sql            Fresh-install schema WITH create-database (recommended)
-schema.sql                    Same tables WITHOUT create-database (create DB first)
-attendance_portal.sql / employee_portal.sql / supabase_schema.sql
-                              Auxiliary / variant schemas
-vendor/                       Committed Composer deps (FPDF) — leave alone
-docs/README.md                Full MVP/product specification
-```
+## Attribution
 
-Root `*.zip` archives are committed artifacts — leave alone.
-
-## Conventions (read before contributing)
-
-From `AGENTS.md` — these are enforced, not suggestions:
-
-- Protected admin pages start with `require_once __DIR__.'/../includes/auth.php'`. Portal pages use `employee/auth.php` instead.
-- Every `POST` handler in `pages/` / `print/` calls `require_csrf()`; every form echoes `csrf_field()` (419 on failure).
-- Escape all HTML interpolation with `e()`.
-- `print/*.php` are FPDF documents, not web views.
-- Bump `?v=` cache-bust strings in `assets/` when changing CSS/JS.
-
-## Security notes
-
-- Session gates on every protected page, CSRF tokens on all POSTs, `htmlspecialchars` via `e()`, hashed passwords (`password_hash`), basic salary never trusted from client input.
-- No admin self-registration; employee portal is scoped at the SQL level so employees only ever see their own rows.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| `Database connection failed` | Start MySQL in XAMPP; confirm `config/database.php` host/user/pass/name; confirm the DB was imported. |
-| Import errors / empty app | Import into a fresh DB. `paywise_schema.sql` needs no pre-created DB; `schema.sql` needs an empty `paywise_payroll` DB first. |
-| Logged out immediately / redirect loop | Check PHP sessions are writable; open via `http://localhost/...`, not `file://`. |
-| Photos won't upload | `uploads/employee_photos/` must be writable; max 2MB JPG/PNG. |
-| PDFs broken / garbled peso sign | Use `pdf_money()` + `pdf_text()` helpers; never emit `₱` into FPDF. |
-| Styles stale after CSS edit | Bump the `?v=` query string on the stylesheet link. |
-
-## Out of scope (v1)
-
-Automatic tax/SSS/PhilHealth/Pag-IBIG tables, bank disbursement files, audit-log UI, email/SMS notifications, leave/overtime engine, biometric integration, multi-branch support, public API.
+Based on the original Paywise Payroll System owned by the project developer. Third-party license notices under `vendor/` remain in place. The existing Paywise design system was reused for the LCC edition.

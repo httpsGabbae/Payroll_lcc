@@ -1,0 +1,30 @@
+# Local database files and exports
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+
+# Credentials and private keys
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+
+# Employee photos contain personal data. Keep the access rule.
+/uploads/employee_photos/*
+!/uploads/employee_photos/.htaccess
+
+# Local verification scripts
+/smoke_lcc.php
+/verify_lcc.php

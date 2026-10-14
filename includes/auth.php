@@ -5,6 +5,16 @@ if (!isset($_SESSION['admin_id'])) {
     header('Location: ../login.php');
     exit;
 }
+$sessionAdminId=(int)$_SESSION['admin_id'];
+$sessionCheck=$conn->prepare('SELECT role,is_active,full_name FROM admins WHERE admin_id=? LIMIT 1');
+$sessionCheck->bind_param('i',$sessionAdminId);$sessionCheck->execute();
+$sessionAdmin=$sessionCheck->get_result()->fetch_assoc();
+if (!$sessionAdmin || (int)$sessionAdmin['is_active']!==1 || !in_array($sessionAdmin['role'],['superadmin','finance','hr'],true)) {
+    unset($_SESSION['admin_id'],$_SESSION['admin_role'],$_SESSION['admin_name']);
+    http_response_code(403); exit('Administrator account is inactive or unavailable.');
+}
+$_SESSION['admin_role']=$sessionAdmin['role'];
+$_SESSION['admin_name']=$sessionAdmin['full_name'];
 
 /* Role-based access. Roles: superadmin (everything + accounts),
    finance (payroll, salary, reports), hr (people + attendance, payroll
@@ -12,26 +22,7 @@ if (!isset($_SESSION['admin_id'])) {
 if (!function_exists('admin_role')) {
     function admin_role(): string
     {
-        $role = $_SESSION['admin_role'] ?? '';
-        if (in_array($role, ['superadmin', 'finance', 'hr'], true)) {
-            return $role;
-        }
-        // Backfill for sessions created before roles existed.
-        global $conn;
-        if (isset($conn) && isset($_SESSION['admin_id'])) {
-            $stmt = $conn->prepare('SELECT role, is_active FROM admins WHERE admin_id=? LIMIT 1');
-            if ($stmt) {
-                $id = (int)$_SESSION['admin_id'];
-                $stmt->bind_param('i', $id);
-                $stmt->execute();
-                $row = $stmt->get_result()->fetch_assoc();
-                if ($row && (int)$row['is_active'] === 1 && in_array($row['role'], ['superadmin', 'finance', 'hr'], true)) {
-                    $_SESSION['admin_role'] = $row['role'];
-                    return $row['role'];
-                }
-            }
-        }
-        return '';
+        return $_SESSION['admin_role'] ?? '';
     }
 }
 

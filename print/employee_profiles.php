@@ -1,7 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../includes/auth.php';
-require_role('superadmin', 'hr');
+require_role('superadmin');
 require_once __DIR__ . '/../includes/pdf.php';
 
 class EmployeeProfilesPDF extends FPDF

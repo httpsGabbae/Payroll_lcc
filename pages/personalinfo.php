@@ -17,6 +17,10 @@ if ($editId > 0) {
         header('Location: employees.php?error=notfound');
         exit;
     }
+    if ($employee['employment_status'] === 'Archived' && !is_superadmin()) {
+        http_response_code(403);
+        exit('Archived employee records are read-only for HR.');
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -47,7 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $department = trim($_POST['department'] ?? '');
     $position = trim($_POST['position'] ?? '');
     $status = $_POST['employment_status'] ?? 'Regular';
-    $salary = (float)($_POST['basic_salary'] ?? 0);
+    $salary = is_superadmin() ? (float)($_POST['basic_salary'] ?? 0) : 0.0;
+    if (!is_superadmin() && $id > 0) {
+        $currentSalary = $conn->prepare('SELECT basic_salary FROM employees WHERE employee_id=? LIMIT 1');
+        $currentSalary->bind_param('i', $id);
+        $currentSalary->execute();
+        $salary = (float)($currentSalary->get_result()->fetch_assoc()['basic_salary'] ?? 0);
+    }
     $dateHired = trim($_POST['date_hired'] ?? '') ?: null;
     $emergencyName = trim($_POST['emergency_contact_name'] ?? '');
     $emergencyPhone = trim($_POST['emergency_contact_phone'] ?? '');
@@ -167,10 +177,10 @@ if ($positionResult) {
 <!-- FAVICON: Put your favicon file at /assets/favicon.png -->
 <link rel="icon" type="image/png" href="../assets/favicon.png">
     <title>LCC Payroll System</title>
-    <link rel="stylesheet" href="../assets/css/app.css?v=20260909-rail4">
+    <link rel="stylesheet" href="../assets/css/app.css?v=20261012-nav1">
     <link rel="stylesheet" href="../assets/css/apple-system.css?v=20260916-apple9">
-    <script src="../assets/js/app.js?v=20260916-rail5" defer></script>
-    <script src="../assets/js/apple-motion.js?v=20260916-apple1" defer></script>
+    <script src="../assets/js/app.js?v=20261012-nav1" defer></script>
+    <script src="../assets/js/apple-motion.js?v=20261012-nav1" defer></script>
 </head>
 
 <body>
@@ -259,7 +269,7 @@ if ($positionResult) {
                                 </select>
                             </div>
                             <div class="field"><label>Employment Status</label><select <?php echo $disabled; ?> name="employment_status"><?php foreach (['Regular', 'Probationary', 'Contractual', 'Part-Time'] as $status): ?><option value="<?php echo $status; ?>" <?php echo ($employee['employment_status'] ?? 'Regular') === $status ? 'selected' : ''; ?>><?php echo $status; ?></option><?php endforeach; ?></select></div>
-                            <div class="field"><label>Basic Salary</label><input <?php echo $disabled; ?> type="number" min="0" step="0.01" name="basic_salary" value="<?php echo field_value($employee, 'basic_salary'); ?>"></div>
+                            <?php if (is_superadmin()): ?><div class="field"><label>Basic Salary</label><input <?php echo $disabled; ?> type="number" min="0" step="0.01" name="basic_salary" value="<?php echo field_value($employee, 'basic_salary'); ?>"></div><?php endif; ?>
                             <div class="field"><label>Date Hired</label><input <?php echo $disabled; ?> type="date" name="date_hired" value="<?php echo field_value($employee, 'date_hired'); ?>"></div>
                         </div>
 
@@ -287,7 +297,7 @@ if ($positionResult) {
                         <div class="form-grid">
                             <div class="field full"><label>Photo <span class="mini">JPG or PNG, maximum 2MB</span></label><input <?php echo $disabled; ?> type="file" name="employee_photo" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></div>
                         </div>
-                        <?php if ($employee && !empty($employee['photo_path'])): ?><div style="margin-top:12px"><img class="profile-photo" src="../<?php echo e(ltrim($employee['photo_path'], '/')); ?>" alt="Employee photo"></div><?php endif; ?>
+                        <?php if ($employee && !empty($employee['photo_path'])): ?><div style="margin-top:12px"><img class="profile-photo" src="../employee_photo.php?id=<?php echo (int)$employee['employee_id']; ?>" alt="Employee photo"></div><?php endif; ?>
                     </div>
                     <div class="form-actions">
                         <button id="saveButton" class="btn btn-primary" type="submit" disabled>✓ Save Employee</button>

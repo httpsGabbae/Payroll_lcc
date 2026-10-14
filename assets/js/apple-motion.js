@@ -65,7 +65,7 @@
 
   /* ——— Entrance choreography: staggered, blurred, spring-eased ——— */
   function reveal() {
-    if (reduceMotion) return;
+    if (reduceMotion || document.body.classList.contains('sidebar-navigation')) return;
     var items = document.querySelectorAll(
       '.card, .quick-action, .stat, .kpi, .hero, .dashboard-hero, ' +
       '.employee-hero, .page-heading, .toolbar, .attendance-filters, .login-card'

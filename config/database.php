@@ -2,11 +2,18 @@
 date_default_timezone_set('Asia/Manila');
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Isolate this edition from the original Paywise session cookie and files.
+    session_name('LCC_PAYROLL_SESSID');
+    $sessionDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'lcc-payroll-sessions';
+    if (!is_dir($sessionDirectory) && !mkdir($sessionDirectory, 0700, true) && !is_dir($sessionDirectory)) {
+        throw new RuntimeException('Cannot create the LCC session directory.');
+    }
+    session_save_path($sessionDirectory);
     $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
     if (PHP_VERSION_ID >= 70300) {
         session_set_cookie_params([
             'lifetime' => 0,
-            'path' => '/',
+            'path' => '/paywise-lcc/',
             'secure' => $isSecure,
             'httponly' => true,
             'samesite' => 'Lax',
@@ -260,10 +267,10 @@ if (!class_exists('DbConn')) {
     }
 }
 
-$dbDriver = strtolower((string)(getenv('DB_DRIVER') ?: 'mysql'));
+$dbDriver = 'mysql'; // The school edition is intentionally MySQL/MariaDB-only.
 if ($dbDriver === 'pgsql' || $dbDriver === 'postgres' || $dbDriver === 'supabase') {
     $dbDriver = 'pgsql';
-    $dbHost = getenv('DB_HOST') ?: getenv('SUPABASE_DB_HOST') ?: 'db.htlbmhkseweclwlixzlz.supabase.co';
+    $dbHost = getenv('DB_HOST') ?: getenv('SUPABASE_DB_HOST') ?: '';
     $dbPort = getenv('DB_PORT') ?: getenv('SUPABASE_DB_PORT') ?: '5432';
     $dbName = getenv('DB_NAME') ?: getenv('SUPABASE_DB_NAME') ?: 'postgres';
     $dbUser = getenv('DB_USER') ?: getenv('SUPABASE_DB_USER') ?: 'postgres';
@@ -282,16 +289,23 @@ if ($dbDriver === 'pgsql' || $dbDriver === 'postgres' || $dbDriver === 'supabase
     $conn = new DbConn($pdo);
 } else {
     $dbDriver = 'mysql';
-    $dbHost = getenv('DB_HOST') ?: 'localhost';
-    $dbUser = getenv('DB_USER') ?: 'root';
-    $dbPass = getenv('DB_PASS') ?: '';
-    $dbName = getenv('DB_NAME') ?: 'paywise_payroll';
+    $dbHost = getenv('LCC_DB_HOST') ?: 'localhost';
+    $dbUser = getenv('LCC_DB_USER') ?: 'root';
+    $dbPass = getenv('LCC_DB_PASS') ?: '';
+    $dbName = getenv('LCC_DB_NAME') ?: 'paywise_lcc_edition';
+    if (in_array(strtolower($dbName), ['paywise_payroll','lcc_payroll'], true)) {
+        throw new RuntimeException('LCC cannot connect to an existing payroll database.');
+    }
 
     $conn = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
     if ($conn->connect_errno) {
         die('Database connection failed: ' . $conn->connect_error);
     }
     $conn->set_charset('utf8mb4');
+    $marker = $conn->query("SELECT setting_value FROM app_settings WHERE setting_key='edition_id' LIMIT 1");
+    if (!$marker || ($marker->fetch_assoc()['setting_value'] ?? '') !== 'paywise-lcc-2026') {
+        throw new RuntimeException('Database is not initialized for the independent Paywise LCC edition.');
+    }
     // Keep database dates/times aligned with the application's Philippines timezone.
     @$conn->query("SET time_zone = '+08:00'");
 }

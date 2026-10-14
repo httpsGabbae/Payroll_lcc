@@ -34,7 +34,7 @@ function ui_icon(string $name, string $class = ''): string
    app.js applies the saved rail state. Idempotent with app.js. */
 function early_paint_state(): void
 {
-    echo '<script>try{var _b=document.body,_m=window.matchMedia("(max-width: 820px)").matches;if(_m){if(localStorage.getItem("lccMobileSidebarExpanded")!=="true")_b.classList.add("sidebar-collapsed");}else if(localStorage.getItem("lccSidebarCollapsed")==="true")_b.classList.add("sidebar-collapsed");if(localStorage.getItem("lccTheme")==="dark")_b.classList.add("dark-mode");}catch(_e){}</script>';
+    echo '<script>try{var _b=document.body,_m=window.matchMedia("(max-width: 820px)").matches;if(_m){if(localStorage.getItem("lccMobileSidebarExpanded")!=="true")_b.classList.add("sidebar-collapsed");}else if(localStorage.getItem("lccSidebarCollapsed")==="true")_b.classList.add("sidebar-collapsed");if(localStorage.getItem("lccTheme")==="dark")_b.classList.add("dark-mode");if(sessionStorage.getItem("lccSidebarNavigation")==="1"){_b.classList.add("sidebar-navigation");sessionStorage.removeItem("lccSidebarNavigation");}}catch(_e){}</script>';
 }
 
 function sidebar(string $active): void
@@ -43,11 +43,18 @@ function sidebar(string $active): void
     // [key, icon, label, url, section header, roles allowed]
     $items = [
         ['dashboard', 'dashboard', 'Dashboard', '../pages/admin_dashboard.php', 'OVERVIEW', ['superadmin', 'finance', 'hr']],
+        ['guide', 'shield', 'How to use this', '../pages/getting_started.php', null, ['superadmin', 'finance', 'hr']],
         ['employees', 'users', 'Employees', '../pages/employees.php', 'PEOPLE', ['superadmin', 'hr']],
         ['departments', 'building', 'Departments', '../pages/departments.php', null, ['superadmin', 'hr']],
         ['add', 'user-plus', 'Add Employee', '../pages/personalinfo.php?mode=new', null, ['superadmin', 'hr']],
-        ['attendance', 'clock', 'Attendance', '../pages/attendance.php', 'WORKFORCE', ['superadmin', 'hr']],
-        ['payroll', 'wallet', 'Payroll', '../pages/payroll.php', 'PAYROLL', ['superadmin', 'finance', 'hr']],
+        ['attendance', 'clock', 'Daily attendance', '../pages/attendance.php', 'ATTENDANCE', ['superadmin', 'hr']],
+        ['attendance_payroll', 'calendar', 'Review hours', '../pages/attendance_payroll.php', 'ATTENDANCE', ['superadmin', 'hr', 'finance']],
+        ['payroll', 'wallet', 'Payroll', '../pages/payroll.php', 'PAYROLL', ['superadmin', 'finance']],
+        ['payroll', 'wallet', 'Payroll attendance', '../pages/payroll.php', 'PAYROLL', ['hr']],
+        ['compensation', 'wallet', 'Set base pay', '../pages/compensation.php', null, ['superadmin', 'finance']],
+        ['recurring_deductions', 'wallet', 'Recurring deductions', '../pages/recurring_deductions.php', null, ['superadmin', 'finance']],
+        ['loans', 'wallet', 'Employee loans', '../pages/loans.php', 'LOANS', ['superadmin', 'finance']],
+        ['loan_types', 'briefcase', 'Loan types', '../pages/loan_types.php', null, ['superadmin', 'finance']],
         ['reports', 'file-chart', 'Reports', '../pages/reports.php', 'INSIGHTS', ['superadmin', 'finance']],
         ['accounts', 'shield', 'Accounts', '../pages/accounts.php', 'SYSTEM', ['superadmin']],
     ];
@@ -81,11 +88,19 @@ function sidebar(string $active): void
     echo '<div class="mobile-more-wrap">';
     echo '<button type="button" class="mobile-more-toggle" aria-expanded="false" aria-label="More navigation"><span class="nav-icon">' . ui_icon('more') . '</span><span class="nav-label">More</span></button>';
     echo '<div class="mobile-more-menu" role="menu">';
+    echo '<a href="../pages/getting_started.php" role="menuitem"><span>' . ui_icon('shield') . '</span>How to use this</a>';
     if (in_array($role, ['superadmin', 'hr'], true)) {
     echo '<a href="../pages/departments.php" role="menuitem"><span>' . ui_icon('building') . '</span>Departments</a>';
     echo '<a href="../pages/personalinfo.php?mode=new" role="menuitem"><span>' . ui_icon('user-plus') . '</span>Add Employee</a>';
+    echo '<a href="../pages/attendance_payroll.php" role="menuitem"><span>' . ui_icon('calendar') . '</span>Review hours</a>';
     }
     if (in_array($role, ['superadmin', 'finance'], true)) {
+    if ($role==='finance') echo '<a href="../pages/attendance_payroll.php" role="menuitem"><span>' . ui_icon('calendar') . '</span>Review hours</a>';
+    echo '<a href="../pages/payroll.php" role="menuitem"><span>' . ui_icon('wallet') . '</span>Payroll</a>';
+    echo '<a href="../pages/compensation.php" role="menuitem"><span>' . ui_icon('wallet') . '</span>Set base pay</a>';
+    echo '<a href="../pages/recurring_deductions.php" role="menuitem"><span>' . ui_icon('wallet') . '</span>Recurring deductions</a>';
+    echo '<a href="../pages/loans.php" role="menuitem"><span>' . ui_icon('wallet') . '</span>Employee Loans</a>';
+    echo '<a href="../pages/loan_types.php" role="menuitem"><span>' . ui_icon('briefcase') . '</span>Loan types</a>';
     echo '<a href="../pages/reports.php" role="menuitem"><span>' . ui_icon('file-chart') . '</span>Reports</a>';
     }
     echo '</div></div>';
@@ -109,13 +124,16 @@ function topbar(string $title): void
     echo '</div>';
 
     echo '<div class="topbar-actions">';
+    if (basename((string)($_SERVER['SCRIPT_NAME'] ?? '')) !== 'getting_started.php') {
+        echo '<a class="topbar-help-link" href="../pages/getting_started.php">How to use this</a>';
+    }
     echo '<button type="button" class="icon-btn theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode"><span id="themeIcon">☾</span></button>';
     echo '<div class="admin-menu">';
     echo '<button type="button" class="admin-chip" id="adminMenuButton" aria-expanded="false">';
     echo '<span class="avatar">' . e($initial) . '</span><span class="admin-name">' . e($adminName) . '</span><span class="admin-chevron">⌄</span>';
     echo '</button>';
     echo '<div class="admin-dropdown" id="adminDropdown">';
-    echo '<div class="admin-dropdown-name">' . e($adminName) . '<span class="admin-role-badge">' . e($roleBadge) . '</span></div>';
+    echo '<div class="admin-dropdown-name"><span class="admin-dropdown-person">' . e($adminName) . '</span><span class="admin-role-badge">' . e($roleBadge) . '</span></div>';
     if ($showAccounts) {
     echo '<a class="dropdown-item" href="../pages/accounts.php"><span>⛨</span> Manage Accounts</a>';
     }

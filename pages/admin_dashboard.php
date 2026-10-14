@@ -24,7 +24,7 @@ if ($r = $conn->query("SELECT COUNT(CASE WHEN time_in IS NOT NULL THEN 1 END) ti
 }
 
 $payrollCount = $payrollGross = $payrollNet = $payrollDed = $payrollPaid = $payrollDrafts = 0; $payrollLabel = 'No payroll records yet — create the first payroll to start the pipeline';
-if ($r = $conn->query("SELECT COUNT(*) total, COALESCE(SUM(gross_pay),0) gross, COALESCE(SUM(net_pay),0) net, COALESCE(SUM(deductions),0) ded, COALESCE(SUM(CASE WHEN status='Paid' THEN 1 ELSE 0 END),0) paid, COALESCE(SUM(CASE WHEN status='Draft' THEN 1 ELSE 0 END),0) drafts FROM payroll_records WHERE period_start >= '" . date('Y-m-01') . "' AND period_start <= '" . date('Y-m-t') . "'")) {
+if ($r = $conn->query("SELECT COUNT(*) total, COALESCE(SUM(p.gross_pay),0) gross, COALESCE(SUM(p.net_pay),0) net, COALESCE(SUM(p.deductions),0) ded, COALESCE(SUM(CASE WHEN p.status='Paid' THEN 1 ELSE 0 END),0) paid, COALESCE(SUM(CASE WHEN p.status='Draft' THEN 1 ELSE 0 END),0) drafts FROM payroll_records p JOIN payroll_periods pp ON pp.period_id=p.period_id WHERE pp.pay_date >= '" . date('Y-m-01') . "' AND pp.pay_date <= '" . date('Y-m-t') . "'")) {
     $p = $r->fetch_assoc(); $payrollCount=(int)$p['total']; $payrollGross=(float)$p['gross']; $payrollNet=(float)$p['net']; $payrollDed=(float)$p['ded']; $payrollPaid=(int)$p['paid']; $payrollDrafts=(int)$p['drafts'];
 }
 if ($payrollCount) $payrollLabel = $payrollCount . ' payroll record' . ($payrollCount === 1 ? '' : 's') . ' this month';
@@ -101,12 +101,12 @@ if ($dashRole === 'finance') {
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="icon" type="image/png" href="../assets/favicon.png"><title>LCC Payroll System</title>
-<link rel="stylesheet" href="../assets/css/app.css?v=20260909-rail4"><link rel="stylesheet" href="../assets/css/apple-system.css?v=20260916-apple9"><link rel="stylesheet" href="../assets/css/dashboard-polish.css?v=20261005-polish2"><script src="../assets/js/app.js?v=20260916-rail5" defer></script><script src="../assets/js/apple-motion.js?v=20260916-apple1" defer></script>
+<link rel="stylesheet" href="../assets/css/app.css?v=20261012-nav1"><link rel="stylesheet" href="../assets/css/apple-system.css?v=20261012-ux1"><link rel="stylesheet" href="../assets/css/dashboard-polish.css?v=20261005-polish2"><script src="../assets/js/app.js?v=20261012-nav1" defer></script><script src="../assets/js/apple-motion.js?v=20261012-nav1" defer></script>
 </head><body><div class="app">
 <?php sidebar('dashboard'); ?><main class="main"><?php topbar('Dashboard'); ?><div class="content">
 <section class="dash-greet">
   <div class="dash-greet-text"><p class="dash-kicker"><?php echo e($workspaceKicker); ?></p><h1><?php echo e($workspaceTitle); ?></h1><p><?php echo e($workspaceSub); ?></p></div>
-  <div class="dash-greet-actions"><?php if ($canPeople): ?><a class="btn btn-primary" href="personalinfo.php?mode=new"><?php echo ui_icon('plus'); ?> Add employee</a><?php endif; ?><?php if ($canPay): ?><a class="btn <?php echo $canPeople ? 'btn-secondary' : 'btn-primary'; ?>" href="payroll.php?add=1">New payroll</a><?php endif; ?></div>
+  <div class="dash-greet-actions"><?php if ($canPeople): ?><a class="btn btn-primary" href="personalinfo.php?mode=new"><?php echo ui_icon('plus'); ?> Add employee</a><?php endif; ?><?php if ($canPay): ?><a class="btn <?php echo $canPeople ? 'btn-secondary' : 'btn-primary'; ?>" href="payroll.php?add=1#new-payroll">Add New Payroll</a><?php endif; ?></div>
 </section>
 
 <div class="dash-grid">
@@ -115,7 +115,7 @@ if ($dashRole === 'finance') {
   <p class="dash-kicker">Payroll · <?php echo e(date('F Y')); ?></p>
   <div class="dash-big"><?php echo money($payrollNet); ?></div>
   <div class="dash-sub">Net pay · gross <?php echo money($payrollGross); ?> · deductions <?php echo money($payrollDed); ?></div>
-  <?php if (!$payrollCount): ?><div class="dash-empty">No payroll records yet — <a href="payroll.php?add=1">create the first payroll</a> to start the pipeline.</div><?php endif; ?>
+  <?php if (!$payrollCount): ?><div class="dash-empty">No payroll records yet — <a href="payroll.php?add=1#new-payroll">add the first payroll</a> to get started.</div><?php endif; ?>
   <div class="dash-months"><span><?php echo $payrollPaid; ?> paid</span><span><?php echo $payrollDrafts; ?> drafts</span><span><?php echo $payrollCount; ?> records</span></div>
   <a class="dash-link" href="reports.php">Open reports →</a>
 </section>
